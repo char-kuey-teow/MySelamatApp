@@ -470,12 +470,15 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
   }
 
   String _adviceForLevel(String l) {
-    if (l == 'RED')
+    if (l == 'RED') {
       return "🔴 Severe risk. Evacuate if instructed. Avoid rivers/underpasses.";
-    if (l == 'ORANGE')
+    }
+    if (l == 'ORANGE') {
       return "🟠 High risk in 24h. Move valuables. Plan evacuation.";
-    if (l == 'YELLOW')
+    }
+    if (l == 'YELLOW') {
       return "🟡 Heavy rain possible. Prepare go-bag. Avoid low areas.";
+    }
     return "🟢 Low risk. Stay alert for updates.";
   }
 
