@@ -1,16 +1,84 @@
-# my_selamat_app
+# MySelamat App
 
-A new Flutter project.
+A Flutter emergency response application with flood risk mapping and SOS functionality.
+
+## Features
+
+- **Flood Risk Map**: Interactive map showing flood risk levels with Google Maps integration
+- **SOS Emergency**: 3-second hold mechanism with category selection and AWS integration
+- **Location Tracking**: Real-time location updates during emergencies
+- **Safe Zone Routing**: Calculate safe routes to evacuation centers
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+### Prerequisites
 
-A few resources to get you started if this is your first Flutter project:
+- Flutter SDK (latest stable version)
+- Android Studio / VS Code
+- Google Maps API key
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+### Setup
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd my_selamat_app
+   ```
+
+2. **Install dependencies**
+   ```bash
+   flutter pub get
+   ```
+
+3. **Configure API Keys**
+   
+   The app requires a Google Maps API key for map functionality. To set this up:
+   
+   a. Copy the example config file:
+   ```bash
+   cp lib/config.example.dart lib/config.dart
+   ```
+   
+   b. Get your Google Maps API key from [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+   
+   c. Edit `lib/config.dart` and replace `YOUR_GOOGLE_API_KEY_HERE` with your actual API key:
+   ```dart
+   static const String googleApiKey = "your_actual_api_key_here";
+   ```
+
+4. **Run the app**
+   ```bash
+   flutter run
+   ```
+
+## Security Notes
+
+- The `config.dart` file is gitignored to prevent exposing API keys
+- Never commit API keys to version control
+- Use the `config.example.dart` file as a template for other developers
+
+## Project Structure
+
+- `lib/main.dart` - Main app entry point with navigation
+- `lib/sos-button.dart` - SOS emergency functionality
+- `lib/flood-map.dart` - Flood risk mapping with Google Maps
+- `lib/config.dart` - API keys and configuration (gitignored)
+- `lib/config.example.dart` - Example configuration template
+
+## API Keys Required
+
+- **Google Maps API**: For map display and routing functionality
+- **AWS API** (optional): For SOS message transmission
+- **Geolocator**: For location services (no API key required)
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Ensure `config.dart` is not committed
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License.

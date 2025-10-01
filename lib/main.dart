@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'sos-button.dart';
+import 'report.dart';
+import 'profile.dart';
 
 // This is the actual Flood Map content you provided, now a stateless content widget
 class _FloodMapContent extends StatelessWidget {
@@ -30,11 +33,8 @@ class _FloodMapContent extends StatelessWidget {
         centerTitle: true,
         elevation: 0,
         bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(10.0), 
-          child: Container(
-            height: 10.0,
-            color: headerBarColor, 
-          ),
+          preferredSize: const Size.fromHeight(10.0),
+          child: Container(height: 10.0, color: headerBarColor),
         ),
       ),
       // 2. Main Content
@@ -61,25 +61,25 @@ class _FloodMapContent extends StatelessWidget {
           ),
           const SizedBox(height: 8.0),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+            padding: const EdgeInsets.symmetric(horizontal: 18.0),
             child: _buildMapPlaceholder(),
           ),
           const SizedBox(height: 8.0),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+            padding: const EdgeInsets.symmetric(horizontal: 14.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(flex: 1, child: _buildRiskLegend()),
-                const SizedBox(width: 8.0),
+                const SizedBox(width: 7.0),
                 Expanded(flex: 2, child: _buildRouteEta()),
               ],
             ),
           ),
           const SizedBox(height: 8.0),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0),
-            child: _buildEmergencyButton(dangerColor),
+            padding: const EdgeInsets.symmetric(horizontal: 14.0),
+            child: _buildReportButton(dangerColor, context),
           ),
         ],
       ),
@@ -94,11 +94,8 @@ class _FloodMapContent extends StatelessWidget {
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: BorderSide( 
-          color: Colors.grey.shade300, 
-          width: 1.3,
+        side: BorderSide(color: Colors.grey.shade300, width: 1.3),
       ),
-        ),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
@@ -131,7 +128,7 @@ class _FloodMapContent extends StatelessWidget {
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
-                    'High risk in 24h. Move valuables. Plan evacuation.',
+                    'High risk in 24h.',
                     style: TextStyle(fontSize: 13, color: Colors.black87),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -358,10 +355,13 @@ class _FloodMapContent extends StatelessWidget {
     );
   }
 
-  Widget _buildEmergencyButton(Color dangerColor) {
+  Widget _buildReportButton(Color dangerColor, BuildContext context) {
     return ElevatedButton(
       onPressed: () {
-        // Handle emergency action
+        // Navigate to report screen
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (context) => const ReportScreen()));
       },
       style: ElevatedButton.styleFrom(
         backgroundColor: dangerColor,
@@ -371,7 +371,7 @@ class _FloodMapContent extends StatelessWidget {
         shadowColor: dangerColor.withOpacity(0.3),
       ),
       child: const Text(
-        'Emergency Escape',
+        'Crowdsource Report',
         style: TextStyle(
           color: Colors.white,
           fontSize: 16,
@@ -397,7 +397,6 @@ class _MainNavigatorState extends State<MainNavigator> {
   int _selectedIndex = 0;
 
   static const primaryColor = Color(0xFF2254C5);
-  static const sosColor = Color(0xFFD32F2F);
 
   // 2. List of screens corresponding to the bottom navigation items
   static final List<Widget> _widgetOptions = <Widget>[
@@ -409,12 +408,7 @@ class _MainNavigatorState extends State<MainNavigator> {
         style: TextStyle(fontSize: 24, color: primaryColor),
       ),
     ), // Index 2: Shelter
-    const Center(
-      child: Text(
-        'Settings Screen',
-        style: TextStyle(fontSize: 24, color: primaryColor),
-      ),
-    ), // Index 3: Settings
+    const ProfileScreen(), // Index 3: Profile
   ];
 
   // 3. Function to update the index when a tab is tapped
@@ -441,7 +435,7 @@ class _MainNavigatorState extends State<MainNavigator> {
           icon: Icon(Icons.house_siding),
           label: 'Shelter',
         ),
-        BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
       onTap: _onItemTapped,
     );
@@ -461,7 +455,9 @@ class _MainNavigatorState extends State<MainNavigator> {
 }
 
 // --- Example `main` function to run the app ---
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   runApp(const MyApp());
 }
 

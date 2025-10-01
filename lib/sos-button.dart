@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Needed for vibration/haptic feedback
 import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'profile.dart';
+import 'config.dart';
 
 // --- Placeholder for the Home Screen ---
 // In a real app, this would be your FloodSafeScreen from the earlier file.
@@ -73,10 +75,9 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   DateTime? _sentTimestamp;
 
   // Location and user data
-  String _userId =
-      'user_123'; // In a real app, this would come from authentication
-  String _userName =
-      'John Doe'; // In a real app, this would come from user profile
+  UserProfile? _currentUserProfile;
+  String _userId = 'demo_user_123';
+  String _userName = 'Demo User';
 
   @override
   void initState() {
@@ -90,8 +91,9 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Initialize location services
+    // Initialize location services and load user profile
     _initializeLocation();
+    _loadUserProfile();
   }
 
   @override
@@ -161,31 +163,36 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
     _pulseController.stop();
   }
 
-  void _showStatusMessage(BuildContext context, String message, {bool isError = false}) {
+  void _showStatusMessage(
+    BuildContext context,
+    String message, {
+    bool isError = false,
+  }) {
     setState(() {
       _currentStatus = message;
       _isErrorStatus = isError;
     });
 
     if (!isError) {
-    // Simulate status updates with longer delays
-    Timer(const Duration(seconds: 20), () {
-      if (mounted && !_isErrorStatus) { // Only update if still on success path
-        setState(() {
-          _currentStatus = 'Rescue on the way';
-        });
-      }
-    });
+      // Simulate status updates with longer delays
+      Timer(const Duration(seconds: 20), () {
+        if (mounted && !_isErrorStatus) {
+          // Only update if still on success path
+          setState(() {
+            _currentStatus = 'Rescue on the way';
+          });
+        }
+      });
 
-    Timer(const Duration(seconds: 40), () {
-      if (mounted && !_isErrorStatus) { // Only update if still on success path
-        setState(() {
-          _currentStatus = 'Reached';
-        });
-      }
-    });
-  }
-
+      Timer(const Duration(seconds: 40), () {
+        if (mounted && !_isErrorStatus) {
+          // Only update if still on success path
+          setState(() {
+            _currentStatus = 'Reached';
+          });
+        }
+      });
+    }
   }
 
   void _markSafe() {
@@ -200,86 +207,227 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
     _locationUpdateTimer?.cancel();
   }
 
+  // User Profile Loading Method
+  Future<void> _loadUserProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userData = prefs.getString('userProfile');
+
+      if (userData != null) {
+        final userMap = jsonDecode(userData);
+        setState(() {
+          _currentUserProfile = UserProfile.fromJson(userMap);
+          _userId = _currentUserProfile!.id;
+          _userName = _currentUserProfile!.displayName;
+        });
+        print('User profile loaded: ${_currentUserProfile!.displayName}');
+      } else {
+        print('No user profile found, using demo data');
+      }
+    } catch (e) {
+      print('Error loading user profile: $e');
+      // Continue with demo data
+    }
+  }
+
   // Location and AWS Integration Methods
   Future<void> _initializeLocation() async {
+    // Check if location services are enabled
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      _showStatusMessage(
+        context,
+        'Location services are disabled. Please enable GPS to use SOS features.',
+        isError: true,
+      );
+      return;
+    }
+
     // Request location permissions
-    final permission = await Permission.location.request();
-    if (permission.isGranted) {
-      try {
-        await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        _showStatusMessage(
+          context,
+          'Location permissions are denied. Please enable location access in settings.',
+          isError: true,
         );
-      } catch (e) {
-        print('Error getting location: $e');
+        return;
       }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      _showStatusMessage(
+        context,
+        'Location permissions are permanently denied. Please enable location access in app settings.',
+        isError: true,
+      );
+      return;
+    }
+
+    // Test location access
+    try {
+      await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
+      );
+      print('Location services initialized successfully');
+    } catch (e) {
+      print('Error getting initial location: $e');
+      _showStatusMessage(
+        context,
+        'Unable to access location. Please check GPS settings.',
+        isError: true,
+      );
     }
   }
 
   Future<Position?> _getCurrentLocation() async {
     try {
-      final permission = await Permission.location.request();
-      if (permission.isGranted) {
-        return await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showStatusMessage(
+          context,
+          'Location services are disabled. Please enable GPS.',
+          isError: true,
         );
+        return null;
       }
+
+      // Check location permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          _showStatusMessage(
+            context,
+            'Location permission denied. Cannot get location.',
+            isError: true,
+          );
+          return null;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        _showStatusMessage(
+          context,
+          'Location permissions permanently denied. Please enable in settings.',
+          isError: true,
+        );
+        return null;
+      }
+
+      // Get current position with timeout
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 15),
+      );
     } catch (e) {
       print('Error getting current location: $e');
+      _showStatusMessage(
+        context,
+        'Failed to get location. Please check GPS signal.',
+        isError: true,
+      );
+      return null;
     }
-    return null;
   }
 
   Future<void> _sendSosToAWS(String category) async {
     try {
-      // Get current location
+      // Show loading status while getting location
+      _showStatusMessage(context, 'Getting your location...', isError: false);
+
+      // Get current location automatically
       final position = await _getCurrentLocation();
       if (position == null) {
-      _showStatusMessage(context, 'Error: Could not get location. Cannot send SOS.', isError: true);
-      return;
-    }
+        _showStatusMessage(
+          context,
+          'Error: Could not get location. Cannot send SOS.',
+          isError: true,
+        );
+        return;
+      }
 
-      // Prepare SOS data
+      // Update status to show location obtained
+      _showStatusMessage(
+        context,
+        'Location obtained. Sending SOS...',
+        isError: false,
+      );
+
+      // Get current timestamp
+      final currentTimestamp = DateTime.now();
+
+      // Prepare SOS data with proper user info
       final sosData = {
         'userId': _userId,
         'userName': _userName,
+        'userEmail': _currentUserProfile?.email ?? 'demo@myselamat.com',
+        'userAddress': _currentUserProfile?.address ?? 'Demo Address',
         'category': category,
         'latitude': position.latitude,
         'longitude': position.longitude,
-        'timestamp': DateTime.now().toIso8601String(),
+        'accuracy': position.accuracy,
+        'altitude': position.altitude,
+        'speed': position.speed,
+        'heading': position.heading,
+        'timestamp': currentTimestamp.toIso8601String(),
         'status': 'active',
+        'deviceInfo': {
+          'platform': 'android', // You can make this dynamic
+          'appVersion': '1.0.0',
+        },
       };
 
-      // Send to AWS (simulated with HTTP request)
-      final response = await http.post(
-        Uri.parse('https://your-aws-api-gateway-url/sos'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization':
-              'Bearer your-auth-token', // In real app, get from AWS Cognito
-        },
-        body: jsonEncode(sosData),
-      );
-
-      if (response.statusCode == 200) {
-        setState(() {
-          _isSosActive = true;
-          _showCategories = false;
-
-          _sentCategory = category;
-          _sentLocation = position;
-          _sentTimestamp = DateTime.now();
-        });
-
-        // Start location updates every 5 minutes
-        _startLocationUpdates();
-
-        _showStatusMessage(context, 'SOS sent to emergency services');
+      // Send SOS data based on configuration
+      if (Config.useDemoMode) {
+        // Simulate successful SOS sending for demo purposes
+        print('DEMO MODE: SOS Data prepared: ${jsonEncode(sosData)}');
+        await Future.delayed(const Duration(seconds: 2));
       } else {
-        _showStatusMessage(context, 'Error sending SOS. Please try again.', isError: true);
+        // Send to actual emergency services API
+        print('Sending SOS to: ${Config.emergencyApiUrl}');
+        final response = await http.post(
+          Uri.parse('${Config.emergencyApiUrl}/sos'),
+          headers: {
+            'Content-Type': 'application/json',
+            // Add authentication headers as needed
+          },
+          body: jsonEncode(sosData),
+        );
+
+        if (response.statusCode != 200) {
+          throw Exception('Failed to send SOS: ${response.statusCode}');
+        }
       }
+
+      // For demo purposes, always succeed
+      setState(() {
+        _isSosActive = true;
+        _showCategories = false;
+
+        _sentCategory = category;
+        _sentLocation = position;
+        _sentTimestamp = currentTimestamp;
+      });
+
+      // Start location updates every 5 minutes
+      _startLocationUpdates();
+
+      _showStatusMessage(
+        context,
+        'SOS sent to emergency services successfully!',
+      );
     } catch (e) {
-      print('Error sending SOS to AWS: $e');
-      _showStatusMessage(context, 'Error sending SOS. Please try again.', isError: true);
+      print('Error sending SOS: $e');
+      _showStatusMessage(
+        context,
+        'Error sending SOS. Please try again.',
+        isError: true,
+      );
     }
   }
 
@@ -303,24 +451,57 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
             'timestamp': DateTime.now().toIso8601String(),
           };
 
-          await http.post(
-            Uri.parse('https://your-aws-api-gateway-url/location-update'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer your-auth-token',
-            },
-            body: jsonEncode(locationUpdate),
-          );
+          // Send location update based on configuration
+          if (Config.useDemoMode) {
+            // Simulate location update for demo purposes
+            print('DEMO MODE: Location update: ${jsonEncode(locationUpdate)}');
+            await Future.delayed(const Duration(seconds: 1));
+          } else {
+            // Send to actual emergency services API
+            final response = await http.post(
+              Uri.parse('${Config.emergencyApiUrl}/location-update'),
+              headers: {
+                'Content-Type': 'application/json',
+                // Add authentication headers as needed
+              },
+              body: jsonEncode(locationUpdate),
+            );
 
-          // Update UI if needed
-          setState(() {});
+            if (response.statusCode != 200) {
+              print(
+                'Failed to update location on server: ${response.statusCode}',
+              );
+              return;
+            }
+          }
 
+          // Update UI with latest location (simulated success)
+          setState(() {
+            _sentLocation = position;
+          });
           print(
-            'Location updated: ${DateTime.now()} - Lat: ${position.latitude}, Lng: ${position.longitude}',
+            'Location updated successfully: ${DateTime.now()} - Lat: ${position.latitude}, Lng: ${position.longitude}',
           );
+        } else {
+          print('Failed to get location for update');
+          // Show error to user if location fails multiple times
+          if (mounted) {
+            _showStatusMessage(
+              context,
+              'Warning: Unable to update location. Please check GPS signal.',
+              isError: true,
+            );
+          }
         }
       } catch (e) {
         print('Error updating location: $e');
+        if (mounted) {
+          _showStatusMessage(
+            context,
+            'Error updating location. Please check your connection.',
+            isError: true,
+          );
+        }
       }
     });
   }
@@ -366,23 +547,29 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                 padding: const EdgeInsets.all(12.0),
                 margin: const EdgeInsets.only(bottom: 8.0),
                 decoration: BoxDecoration(
-                  color: _isErrorStatus ? Colors.red.withOpacity(0.2) : Colors.green.withOpacity(0.2),
+                  color:
+                      _isErrorStatus
+                          ? Colors.red.withOpacity(0.2)
+                          : Colors.green.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(8),
-                  border: _isErrorStatus ? Border.all(color: Colors.red, width: 1) : Border.all(color: Colors.green, width: 1),
+                  border:
+                      _isErrorStatus
+                          ? Border.all(color: Colors.red, width: 1)
+                          : Border.all(color: Colors.green, width: 1),
                 ),
                 child: Row(
                   children: [
                     Icon(
-                      _isErrorStatus ? Icons.close : Icons.check_circle, 
-                      color: _isErrorStatus ? Colors.red : Colors.green, 
+                      _isErrorStatus ? Icons.close : Icons.check_circle,
+                      color: _isErrorStatus ? Colors.red : Colors.green,
                       size: 20,
-                      ),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _currentStatus,
                         style: TextStyle(
-                          color: _isErrorStatus ? Colors.red : Colors.green, 
+                          color: _isErrorStatus ? Colors.red : Colors.green,
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
@@ -672,6 +859,12 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                 label: 'User',
                 value: _userName,
                 color: Colors.white,
+              ),
+              _buildDetailRow(
+                icon: Icons.email_outlined,
+                label: 'Email',
+                value: _currentUserProfile?.email ?? 'demo@myselamat.com',
+                color: Colors.white70,
               ),
               _buildDetailRow(
                 icon: Icons.warning_amber_rounded,
