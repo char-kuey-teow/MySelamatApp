@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "58545088007",
+    "project_id": "myselamat-eca8c",
+    "storage_bucket": "myselamat-eca8c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:58545088007:android:e1c672fd6937da3c8eeca2",
+        "android_client_info": {
+          "package_name": "com.example.my_selamat_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "58545088007-hrm0q1fi59l5tdf1gqnvog2cal6qmdmf.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBW2zfWM-ln9AR522j6Z4fxyniiX70KwF0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "58545088007-hrm0q1fi59l5tdf1gqnvog2cal6qmdmf.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

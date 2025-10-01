@@ -4,17 +4,19 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' as latlng2;
+import 'config.dart';
 
 // --- 1. CONFIGURATION CONSTANTS (from map.js) ---
 const bool USE_MOCKS = true;
 const String API_BASE = "http://localhost:3001"; // For real backend API access
-const String MOCK_PATH = "http://localhost:8080/mocks"; // Assuming mock files are served
+const String MOCK_PATH =
+    "http://localhost:8080/mocks"; // Assuming mock files are served
 const LatLng DEFAULT_CENTER = LatLng(6.129, 102.243); // Kota Bharu
 const bool USE_FAKE_USER_LOC = true;
 const LatLng FAKE_USER_LOC = LatLng(6.191, 102.273);
 
-// Replace with your actual key in production
-const String GOOGLE_API_KEY = "AIzaSyAupowXVdjw9VQESNxsqBeWskKjXvfeTZE"; 
+// API key is now loaded from config.dart (gitignored file)
+const String GOOGLE_API_KEY = Config.googleApiKey;
 const String ROUTES_BASE = "https://routes.googleapis.com";
 
 // --- 2. DATA MODELS ---
@@ -30,10 +32,10 @@ class FloodRiskInfo {
   final String level;
   final List<String> reasons;
   final List<List<LatLng>> polygons;
-  
+
   FloodRiskInfo({
-    required this.districtId, 
-    required this.level, 
+    required this.districtId,
+    required this.level,
     required this.reasons,
     required this.polygons,
   });
@@ -84,24 +86,38 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
       final fri = await _safeFetch('$MOCK_PATH/fri.latest.json');
       final safe = await _safeFetch('$MOCK_PATH/safe-zones.json');
       // GeoJSON loading for hazards is complex in Flutter; we'll simulate it for now.
-      
+
       // 2. Process and Draw Layers
       final friData = _parseFri(fri);
       final safeZones = _parseSafeZones(safe);
-      
+
       _drawFRI(friData);
       _drawSafeZones(safeZones);
-      
+
       // 3. Initialize Panel
-      final top = friData.reduce((a, b) => _severity(b.level) > _severity(a.level) ? b : a);
-      _setAdviceFor(top.level, top.reasons, _nameFromDistrictId(top.districtId));
+      final top = friData.reduce(
+        (a, b) => _severity(b.level) > _severity(a.level) ? b : a,
+      );
+      _setAdviceFor(
+        top.level,
+        top.reasons,
+        _nameFromDistrictId(top.districtId),
+      );
 
       // 4. Fit map to user area (5km circle)
       if (_mapController != null) {
         final dist = latlng2.Distance();
         // Calculate the bounding box for 5km around the user
-        final northEast = dist.offset(latlng2.LatLng(userLoc.latitude, userLoc.longitude), 5000, 45); // 45 degrees for NE
-        final southWest = dist.offset(latlng2.LatLng(userLoc.latitude, userLoc.longitude), 5000, 225); // 225 degrees for SW
+        final northEast = dist.offset(
+          latlng2.LatLng(userLoc.latitude, userLoc.longitude),
+          5000,
+          45,
+        ); // 45 degrees for NE
+        final southWest = dist.offset(
+          latlng2.LatLng(userLoc.latitude, userLoc.longitude),
+          5000,
+          225,
+        ); // 225 degrees for SW
 
         _mapController!.animateCamera(
           CameraUpdate.newLatLngBounds(
@@ -118,7 +134,7 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
       _setAdviceFor("RED", ["Data loading failed"], "Error");
     }
   }
-  
+
   // --- 5. DATA FETCHING AND PARSING ---
 
   // Equivalent to JS 'safeFetch'
@@ -135,25 +151,35 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
     if (data is! List) return [];
     return data.map((d) {
       // Converts [[lng, lat], [lng, lat], ...] to List<LatLng>
-      final polygons = (d['polygon']?[0] as List<dynamic>?)
-          ?.map((point) => LatLng(point[1] as double, point[0] as double))
-          .toList() ?? [];
+      final polygons =
+          (d['polygon']?[0] as List<dynamic>?)
+              ?.map((point) => LatLng(point[1] as double, point[0] as double))
+              .toList() ??
+          [];
 
       return FloodRiskInfo(
         districtId: d['districtId'] ?? '',
         level: d['level'] ?? 'GREEN',
-        reasons: (d['reasons'] as List<dynamic>?)?.map((r) => r.toString()).toList() ?? [],
+        reasons:
+            (d['reasons'] as List<dynamic>?)
+                ?.map((r) => r.toString())
+                .toList() ??
+            [],
         polygons: [polygons],
       );
     }).toList();
   }
-  
+
   List<SafeZone> _parseSafeZones(dynamic data) {
     if (data is! List) return [];
-    return data.map((s) => SafeZone(
-      name: s['name'] ?? '',
-      location: LatLng(s['lat'] as double, s['lng'] as double),
-    )).toList();
+    return data
+        .map(
+          (s) => SafeZone(
+            name: s['name'] ?? '',
+            location: LatLng(s['lat'] as double, s['lng'] as double),
+          ),
+        )
+        .toList();
   }
 
   // --- 6. MAP DRAWING FUNCTIONS (Equivalents to JS functions) ---
@@ -168,7 +194,9 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
             points: d.polygons[0],
             strokeWidth: 1,
             strokeColor: Colors.black.withOpacity(0.4),
-            fillColor: _colorForLevel(d.level).withOpacity(d.level == 'GREEN' ? 0.15 : 0.25),
+            fillColor: _colorForLevel(
+              d.level,
+            ).withOpacity(d.level == 'GREEN' ? 0.15 : 0.25),
             consumeTapEvents: true,
             onTap: () {
               _onFriTapped(d);
@@ -183,12 +211,20 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
   }
 
   void _onFriTapped(FloodRiskInfo info) {
-    _setAdviceFor(info.level, info.reasons, _nameFromDistrictId(info.districtId));
+    _setAdviceFor(
+      info.level,
+      info.reasons,
+      _nameFromDistrictId(info.districtId),
+    );
     // In a real app, you would show an InfoWindow/BottomSheet here.
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('${_nameFromDistrictId(info.districtId)}: Level ${info.level}'),
-      duration: const Duration(seconds: 2),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${_nameFromDistrictId(info.districtId)}: Level ${info.level}',
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   void _drawSafeZones(List<SafeZone> safeZones) {
@@ -225,11 +261,17 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text(destination.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text(
+                destination.name,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 10),
               ElevatedButton(
                 onPressed: () {
-                  Navigator.pop(context); 
+                  Navigator.pop(context);
                   _getSafeRoute(_userLocation!, destination);
                 },
                 style: ElevatedButton.styleFrom(
@@ -259,28 +301,47 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
 
     try {
       final body = {
-        "origin": { "location": { "latLng": { "latitude": origin.latitude, "longitude": origin.longitude } } },
-        "destination": { "location": { "latLng": { "latitude": destination.location.latitude, "longitude": destination.location.longitude } } },
+        "origin": {
+          "location": {
+            "latLng": {
+              "latitude": origin.latitude,
+              "longitude": origin.longitude,
+            },
+          },
+        },
+        "destination": {
+          "location": {
+            "latLng": {
+              "latitude": destination.location.latitude,
+              "longitude": destination.location.longitude,
+            },
+          },
+        },
         "travelMode": "DRIVE",
         "routingPreference": "TRAFFIC_AWARE",
         "polylineQuality": "HIGH_QUALITY",
-        "polylineEncoding": "GEO_JSON_LINESTRING"
+        "polylineEncoding": "GEO_JSON_LINESTRING",
       };
 
-      final url = Uri.parse('$ROUTES_BASE/directions/v2:computeRoutes?key=$GOOGLE_API_KEY');
+      final url = Uri.parse(
+        '$ROUTES_BASE/directions/v2:computeRoutes?key=$GOOGLE_API_KEY',
+      );
 
       final res = await http.post(
         url,
         headers: {
           "Content-Type": "application/json",
-          "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.polyline.geoJsonLinestring,routes.polyline.encodedPolyline"
+          "X-Goog-FieldMask":
+              "routes.distanceMeters,routes.duration,routes.polyline.geoJsonLinestring,routes.polyline.encodedPolyline",
         },
         body: jsonEncode(body),
       );
 
       final data = jsonDecode(res.body);
 
-      if (res.statusCode != 200 || data['routes'] == null || data['routes'].isEmpty) {
+      if (res.statusCode != 200 ||
+          data['routes'] == null ||
+          data['routes'].isEmpty) {
         final msg = data['error']?['message'] ?? 'Unknown route error.';
         debugPrint('ComputeRoutes error: ${res.statusCode} $msg');
         _setEtaSummaryError('Route error: $msg');
@@ -288,23 +349,26 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
       }
 
       final route = data['routes'][0];
-      
+
       // Decode Polyline
       final List<LatLng> path = [];
       if (route['polyline']?['geoJsonLinestring']?['coordinates'] != null) {
         // GeoJSON: coordinates are [lng, lat]
-        for (var point in route['polyline']['geoJsonLinestring']['coordinates']) {
+        for (var point
+            in route['polyline']['geoJsonLinestring']['coordinates']) {
           path.add(LatLng(point[1], point[0]));
         }
       } else if (route['polyline']?['encodedPolyline'] != null) {
         // Fallback to encoded polyline (requires google_maps_flutter util)
-        // Note: Flutter's Google Maps package doesn't expose a polyline decoder directly. 
+        // Note: Flutter's Google Maps package doesn't expose a polyline decoder directly.
         // We'll rely only on GeoJSON for simplicity and alignment with the JS request.
         // For a production app, a dedicated polyline utility package would be needed.
-        _setEtaSummaryError("Route error: Encoded polyline fallback not implemented in Flutter.");
+        _setEtaSummaryError(
+          "Route error: Encoded polyline fallback not implemented in Flutter.",
+        );
         return;
       }
-      
+
       if (path.isEmpty) {
         _setEtaSummaryError("Route error: No polyline data found.");
         return;
@@ -318,23 +382,27 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
             points: path,
             color: Colors.red,
             width: 4,
-          )
+          ),
         };
       });
-      
+
       // Update ETA box
       final distanceMeters = route['distanceMeters'] as int;
       final durationString = route['duration'] as String; // e.g., "600s"
-      
+
       final sec = int.parse(durationString.replaceAll('s', ''));
       final min = (sec / 60).round();
       final km = distanceMeters / 1000.0;
-      
+
       _updateEtaSummary(min, km, origin, destination);
 
-      _setAdviceFor("GREEN", ["Route calculated"], "Routing",
-        user: origin, zone: destination.location);
-
+      _setAdviceFor(
+        "GREEN",
+        ["Route calculated"],
+        "Routing",
+        user: origin,
+        zone: destination.location,
+      );
     } catch (e) {
       debugPrint('Routes API fetch failed: $e');
       _setEtaSummaryError('Route error: request failed.');
@@ -369,45 +437,71 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
 
     final position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
-      timeout: const Duration(seconds: 5),
     );
     return LatLng(position.latitude, position.longitude);
   }
-  
+
   // --- 9. HELPERS (from map.js) ---
 
-  int _severity(String l){ return l=='RED'?3 : l=='ORANGE'?2 : l=='YELLOW'?1 : 0; }
-  
-  String _nameFromDistrictId(String id){
-    if(id.isEmpty) return "Unknown area";
+  int _severity(String l) {
+    return l == 'RED'
+        ? 3
+        : l == 'ORANGE'
+        ? 2
+        : l == 'YELLOW'
+        ? 1
+        : 0;
+  }
+
+  String _nameFromDistrictId(String id) {
+    if (id.isEmpty) return "Unknown area";
     final parts = id.split(":");
     return parts.last.replaceAll("_", " ");
   }
-  
-  Color _colorForLevel(String l){return l=='RED'?const Color(0xffd32f2f):l=='ORANGE'?const Color(0xfff57c00):l=='YELLOW'?const Color(0xfffbc02d):const Color(0xff43a047);}
 
-  String _adviceForLevel(String l){
-    if(l=='RED')return"🔴 Severe risk. Evacuate if instructed. Avoid rivers/underpasses.";
-    if(l=='ORANGE')return"🟠 High risk in 24h. Move valuables. Plan evacuation.";
-    if(l=='YELLOW')return"🟡 Heavy rain possible. Prepare go-bag. Avoid low areas.";
-    return"🟢 Low risk. Stay alert for updates.";
+  Color _colorForLevel(String l) {
+    return l == 'RED'
+        ? const Color(0xffd32f2f)
+        : l == 'ORANGE'
+        ? const Color(0xfff57c00)
+        : l == 'YELLOW'
+        ? const Color(0xfffbc02d)
+        : const Color(0xff43a047);
   }
 
-  String _badgeForLevel(String level){
+  String _adviceForLevel(String l) {
+    if (l == 'RED')
+      return "🔴 Severe risk. Evacuate if instructed. Avoid rivers/underpasses.";
+    if (l == 'ORANGE')
+      return "🟠 High risk in 24h. Move valuables. Plan evacuation.";
+    if (l == 'YELLOW')
+      return "🟡 Heavy rain possible. Prepare go-bag. Avoid low areas.";
+    return "🟢 Low risk. Stay alert for updates.";
+  }
+
+  String _badgeForLevel(String level) {
     final l = level.toUpperCase();
     return l;
   }
-  
-  void _setAdviceFor(String level, List<String> reasons, String title, {LatLng? user, LatLng? zone}) {
+
+  void _setAdviceFor(
+    String level,
+    List<String> reasons,
+    String title, {
+    LatLng? user,
+    LatLng? zone,
+  }) {
     final msg = _adviceForLevel(level);
     String details = '';
     if (user != null) {
-      details += 'User: ${user.latitude.toStringAsFixed(4)}, ${user.longitude.toStringAsFixed(4)}\n';
+      details +=
+          'User: ${user.latitude.toStringAsFixed(4)}, ${user.longitude.toStringAsFixed(4)}\n';
     }
     if (zone != null) {
-      details += 'Zone: ${zone.latitude.toStringAsFixed(4)}, ${zone.longitude.toStringAsFixed(4)}\n';
+      details +=
+          'Zone: ${zone.latitude.toStringAsFixed(4)}, ${zone.longitude.toStringAsFixed(4)}\n';
     }
-    
+
     setState(() {
       _currentLevel = level;
       _adviceTitle = "$title ${_badgeForLevel(level)}";
@@ -415,21 +509,27 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
     });
   }
 
-  void _updateEtaSummary(int min, double km, LatLng origin, SafeZone destination){
+  void _updateEtaSummary(
+    int min,
+    double km,
+    LatLng origin,
+    SafeZone destination,
+  ) {
     final toLabel = destination.name;
-    final fromStr = '${origin.latitude.toStringAsFixed(4)}, ${origin.longitude.toStringAsFixed(4)}';
+    final fromStr =
+        '${origin.latitude.toStringAsFixed(4)}, ${origin.longitude.toStringAsFixed(4)}';
 
     setState(() {
-      _etaSummary = 'ETA: ~$min min • Distance: ${km.toStringAsFixed(1)} km\nFrom: $fromStr | To: $toLabel';
+      _etaSummary =
+          'ETA: ~$min min • Distance: ${km.toStringAsFixed(1)} km\nFrom: $fromStr | To: $toLabel';
     });
   }
-  
-  void _setEtaSummaryError(String msg){
+
+  void _setEtaSummaryError(String msg) {
     setState(() {
       _etaSummary = msg;
     });
   }
-
 
   // --- 10. FLUTTER UI BUILDER (Replacing the HTML map/panels) ---
 
@@ -440,7 +540,7 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
       target: _userLocation ?? DEFAULT_CENTER,
       zoom: 12,
     );
-    
+
     // The main map view area
     final mapWidget = AspectRatio(
       aspectRatio: 1.2,
@@ -456,7 +556,7 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
               _mapController = controller;
               // Re-run initMap to adjust camera after controller is available
               if (_userLocation != null) {
-                _initMap(); 
+                _initMap();
               }
             },
             initialCameraPosition: initialCameraPosition,
@@ -469,7 +569,7 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
         ),
       ),
     );
-    
+
     // Advice Panel UI (Replacing the JS 'advice' div)
     final advicePanel = Card(
       elevation: 2,
@@ -481,19 +581,29 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
             Row(
               children: [
                 Text(
-                  _adviceTitle.split(' ')[0], 
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)
+                  _adviceTitle.split(' ')[0],
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: _colorForLevel(_currentLevel),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     _currentLevel,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -550,7 +660,7 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
         ],
       ),
     );
-    
+
     // Legend UI (Replacing the JS 'legend' div)
     final legend = Container(
       padding: const EdgeInsets.all(12),
@@ -558,7 +668,11 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.1), spreadRadius: 1, blurRadius: 3),
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 3,
+          ),
         ],
       ),
       child: Column(
@@ -569,7 +683,14 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
           _buildLegendItem('Orange', _colorForLevel('ORANGE')),
           _buildLegendItem('Red', _colorForLevel('RED')),
           const SizedBox(height: 8),
-          const Text('Tap district for details', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.black54)),
+          const Text(
+            'Tap district for details',
+            style: TextStyle(
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
+              color: Colors.black54,
+            ),
+          ),
         ],
       ),
     );
@@ -585,7 +706,7 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
             child: advicePanel,
           ),
           const SizedBox(height: 16.0),
-          
+
           // 2. Map Widget
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -606,24 +727,29 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
             ),
           ),
           const SizedBox(height: 32.0),
-          
+
           // 4. Emergency Escape Button (Placeholder logic)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: ElevatedButton(
-              onPressed: () { /* Handle emergency action */ },
+              onPressed: () {
+                /* Handle emergency action */
+              },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFC62828), 
-                minimumSize: const Size(double.infinity, 50), 
+                backgroundColor: const Color(0xFFC62828),
+                minimumSize: const Size(double.infinity, 50),
               ),
-              child: const Text('Emergency Escape', style: TextStyle(color: Colors.white, fontSize: 20)),
+              child: const Text(
+                'Emergency Escape',
+                style: TextStyle(color: Colors.white, fontSize: 20),
+              ),
             ),
           ),
         ],
       ),
     );
   }
-  
+
   Widget _buildLegendItem(String label, Color color) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.0),
@@ -657,14 +783,14 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'MySelamat FloodSafe Map',
-      theme: ThemeData(
-        fontFamily: 'Public Sans', 
-        primarySwatch: Colors.blue,
-      ),
+      theme: ThemeData(fontFamily: 'Public Sans', primarySwatch: Colors.blue),
       // We wrap the map content in a Scaffold to provide app bar and other UI
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('MySelamat Flood Map', style: TextStyle(color: Colors.white)),
+          title: const Text(
+            'MySelamat Flood Map',
+            style: TextStyle(color: Colors.white),
+          ),
           backgroundColor: const Color(0xFF2254C5),
         ),
         body: const FloodMapWidget(),
