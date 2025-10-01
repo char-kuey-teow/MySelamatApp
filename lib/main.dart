@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'sos-button.dart';
+import 'text_chatbot.dart';
 
 // This is the actual Flood Map content you provided, now a stateless content widget
 class _FloodMapContent extends StatelessWidget {
@@ -403,12 +404,7 @@ class _MainNavigatorState extends State<MainNavigator> {
   static final List<Widget> _widgetOptions = <Widget>[
     const _FloodMapContent(),
     const SosScreen(),
-    const Center(
-      child: Text(
-        'Shelter Screen',
-        style: TextStyle(fontSize: 24, color: primaryColor),
-      ),
-    ), // Index 2: Shelter
+    const TextChatbotScreen(), // Index 2: Chatbot
     const Center(
       child: Text(
         'Settings Screen',
@@ -438,8 +434,8 @@ class _MainNavigatorState extends State<MainNavigator> {
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
         BottomNavigationBarItem(icon: Icon(Icons.sos_outlined), label: 'SOS'),
         BottomNavigationBarItem(
-          icon: Icon(Icons.house_siding),
-          label: 'Shelter',
+          icon: Icon(Icons.chat),
+          label: 'Chat',
         ),
         BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
       ],

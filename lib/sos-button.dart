@@ -73,9 +73,9 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   DateTime? _sentTimestamp;
 
   // Location and user data
-  String _userId =
+  final String _userId =
       'user_123'; // In a real app, this would come from authentication
-  String _userName =
+  final String _userName =
       'John Doe'; // In a real app, this would come from user profile
 
   @override
