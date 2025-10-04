@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'lex_service.dart';
 import 'amplify_interactions_service.dart';
-import 'config.dart';
 
 // --- Chatbot Service with Amazon Lex Integration ---
 
@@ -40,27 +38,19 @@ class ChatbotService {
     
     _messages.clear();
     
-    // Initialize the appropriate Lex service based on configuration
-    if (Config.useAmplify) {
-      await AmplifyInteractionsService.initialize(userId: userId);
-      // Add user location to session attributes if available
-      AmplifyInteractionsService.setSessionAttribute('userLocation', 'Malaysia');
-      AmplifyInteractionsService.setSessionAttribute('appVersion', '1.0.0');
-    } else {
-      LexService.initialize(userId: userId);
-      // Add user location to session attributes if available
-      LexService.setSessionAttribute('userLocation', 'Malaysia');
-      LexService.setSessionAttribute('appVersion', '1.0.0');
-    }
+    // Initialize Amplify Interactions service
+    await AmplifyInteractionsService.initialize(userId: userId);
+    // Add user location to session attributes if available
+    AmplifyInteractionsService.setSessionAttribute('userLocation', 'Malaysia');
+    AmplifyInteractionsService.setSessionAttribute('appVersion', '1.0.0');
     
     _addWelcomeMessage();
     _isInitialized = true;
   }
 
   static void _addWelcomeMessage() {
-    final serviceName = Config.useAmplify ? "AWS Amplify and Amazon Lex" : "Amazon Lex";
     _messages.add(ChatMessage(
-      text: "Hello! I'm SelamatBot, your emergency assistance chatbot powered by $serviceName. I can help you with emergency assistance, flood information, and weather updates. How can I help you today?",
+      text: "Hello! I'm SelamatBot, your emergency assistance chatbot powered by AWS Amplify and Amazon Lex. I can help you with emergency assistance, flood information, and weather updates. How can I help you today?",
       isUser: false,
       timestamp: DateTime.now(),
       quickActions: [
@@ -100,13 +90,8 @@ class ChatbotService {
       timestamp: DateTime.now(),
     ));
 
-    // Send message to the appropriate Lex service
-    dynamic lexResponse;
-    if (Config.useAmplify) {
-      lexResponse = await AmplifyInteractionsService.sendMessage(message);
-    } else {
-      lexResponse = await LexService.sendMessage(message);
-    }
+    // Send message to Amplify Interactions service
+    dynamic lexResponse = await AmplifyInteractionsService.sendMessage(message);
     
     // Convert Lex response to ChatMessage
     final botResponse = ChatMessage(
@@ -154,13 +139,8 @@ class ChatbotService {
       timestamp: DateTime.now(),
     ));
 
-    // Send quick action to the appropriate Lex service
-    dynamic lexResponse;
-    if (Config.useAmplify) {
-      lexResponse = await AmplifyInteractionsService.sendMessage(action);
-    } else {
-      lexResponse = await LexService.sendMessage(action);
-    }
+    // Send quick action to Amplify Interactions service
+    dynamic lexResponse = await AmplifyInteractionsService.sendMessage(action);
     
     // Convert Lex response to ChatMessage
     final botResponse = ChatMessage(
@@ -183,26 +163,15 @@ class ChatbotService {
 
   // Get session information for debugging
   static Map<String, dynamic> getSessionInfo() {
-    if (Config.useAmplify) {
-      return AmplifyInteractionsService.getSessionInfo();
-    } else {
-      return LexService.getSessionInfo();
-    }
+    return AmplifyInteractionsService.getSessionInfo();
   }
 
   // Clear session and restart
   static void restartSession({String? userId}) async {
     _messages.clear();
-    if (Config.useAmplify) {
-      AmplifyInteractionsService.resetSession();
-      if (userId != null) {
-        await AmplifyInteractionsService.initialize(userId: userId);
-      }
-    } else {
-      LexService.resetSession();
-      if (userId != null) {
-        LexService.initialize(userId: userId);
-      }
+    AmplifyInteractionsService.resetSession();
+    if (userId != null) {
+      await AmplifyInteractionsService.initialize(userId: userId);
     }
     _addWelcomeMessage();
   }

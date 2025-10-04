@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'chatbot.dart';
-import 'config_helper.dart';
+import 'config.dart';
 
 // --- Text-Only Chatbot Screen ---
 
@@ -372,8 +372,8 @@ class _TextChatbotScreenState extends State<TextChatbotScreen> with TickerProvid
 
   void _showDebugInfo() {
     final sessionInfo = ChatbotService.getSessionInfo();
-    final configStatus = ConfigHelper.getConfigStatus();
-    final setupInstructions = ConfigHelper.getSetupInstructions();
+    final configStatus = _getConfigStatus();
+    final setupInstructions = _getSetupInstructions();
     
     showDialog(
       context: context,
@@ -394,14 +394,12 @@ class _TextChatbotScreenState extends State<TextChatbotScreen> with TickerProvid
               
               const Text('Configuration:', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Text('Bot Name: ${configStatus['botName']}'),
-              Text('Bot Alias: ${configStatus['botAlias']}'),
-              Text('Region: ${configStatus['region']}'),
+              Text(configStatus),
               const SizedBox(height: 16),
               
               const Text('Setup Instructions:', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              ...setupInstructions.map((instruction) => Text('• $instruction')),
+              Text(setupInstructions),
             ],
           ),
         ),
@@ -413,7 +411,7 @@ class _TextChatbotScreenState extends State<TextChatbotScreen> with TickerProvid
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              ConfigHelper.printConfigStatus();
+              _printConfigStatus();
             },
             child: const Text('Print to Console'),
           ),
@@ -435,6 +433,31 @@ class _TextChatbotScreenState extends State<TextChatbotScreen> with TickerProvid
     } else {
       return '${timestamp.day}/${timestamp.month} ${timestamp.hour}:${timestamp.minute.toString().padLeft(2, '0')}';
     }
+  }
+
+  String _getConfigStatus() {
+    return 'AWS Amplify Configuration:\n'
+        '• Bot Name: ${Config.lexBotName}\n'
+        '• Bot ID: ${Config.lexBotId}\n'
+        '• Bot Alias: ${Config.lexBotAlias}\n'
+        '• Region: ${Config.amplifyRegion}\n'
+        '• Use Amplify: ${Config.useAmplify}\n'
+        '• Config Valid: ${Config.isAmplifyConfigValid}';
+  }
+
+  String _getSetupInstructions() {
+    return 'Setup Instructions:\n'
+        '1. Configure AWS Amplify backend\n'
+        '2. Set up Amazon Lex bot\n'
+        '3. Update configuration in config.dart\n'
+        '4. Deploy with amplify push';
+  }
+
+  void _printConfigStatus() {
+    print('=== Configuration Status ===');
+    print(_getConfigStatus());
+    print('\n=== Setup Instructions ===');
+    print(_getSetupInstructions());
   }
 }
 
