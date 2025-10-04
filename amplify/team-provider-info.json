@@ -1,0 +1,15 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-myselamatapp-dev-53eaf-authRole",
+      "UnauthRoleArn": "arn:aws:iam::679049666031:role/amplify-myselamatapp-dev-53eaf-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::679049666031:role/amplify-myselamatapp-dev-53eaf-authRole",
+      "Region": "us-east-1",
+      "DeploymentBucketName": "amplify-myselamatapp-dev-53eaf-deployment",
+      "UnauthRoleName": "amplify-myselamatapp-dev-53eaf-unauthRole",
+      "StackName": "amplify-myselamatapp-dev-53eaf",
+      "StackId": "arn:aws:cloudformation:us-east-1:679049666031:stack/amplify-myselamatapp-dev-53eaf/c8817090-a0e0-11f0-9467-0e238f217595",
+      "AmplifyAppId": "d9yyzja74405q"
+    }
+  }
+}

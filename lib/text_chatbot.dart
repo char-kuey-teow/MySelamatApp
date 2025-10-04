@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'chatbot.dart';
+import 'config_helper.dart';
 
 // --- Text-Only Chatbot Screen ---
 
@@ -127,6 +128,11 @@ class _TextChatbotScreenState extends State<TextChatbotScreen> with TickerProvid
           ),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: () => _showDebugInfo(),
+            tooltip: 'Debug Info',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
@@ -358,6 +364,58 @@ class _TextChatbotScreenState extends State<TextChatbotScreen> with TickerProvid
               icon: const Icon(Icons.send, color: Colors.white),
               onPressed: _sendMessage,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDebugInfo() {
+    final sessionInfo = ChatbotService.getSessionInfo();
+    final configStatus = ConfigHelper.getConfigStatus();
+    final setupInstructions = ConfigHelper.getSetupInstructions();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Debug Information'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Session Info:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text('Session ID: ${sessionInfo['sessionId']}'),
+              Text('User ID: ${sessionInfo['userId']}'),
+              Text('Demo Mode: ${sessionInfo['isDemoMode']}'),
+              Text('Config Valid: ${sessionInfo['isConfigValid']}'),
+              const SizedBox(height: 16),
+              
+              const Text('Configuration:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text('Bot Name: ${configStatus['botName']}'),
+              Text('Bot Alias: ${configStatus['botAlias']}'),
+              Text('Region: ${configStatus['region']}'),
+              const SizedBox(height: 16),
+              
+              const Text('Setup Instructions:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ...setupInstructions.map((instruction) => Text('• $instruction')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              ConfigHelper.printConfigStatus();
+            },
+            child: const Text('Print to Console'),
           ),
         ],
       ),

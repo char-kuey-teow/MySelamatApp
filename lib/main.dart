@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
+import 'amplifyconfiguration.dart';
 import 'sos-button.dart';
 import 'text_chatbot.dart';
 import 'report.dart';
 import 'profile.dart';
+import 'config.dart';
 
 // This is the actual Flood Map content you provided, now a stateless content widget
 class _FloodMapContent extends StatelessWidget {
@@ -460,7 +464,26 @@ class _MainNavigatorState extends State<MainNavigator> {
 // --- Example `main` function to run the app ---
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase
   await Firebase.initializeApp();
+  
+  // Initialize AWS Amplify if configured
+  if (Config.useAmplify) {
+    try {
+      if (!Amplify.isConfigured) {
+        await Amplify.addPlugin(AmplifyAuthCognito());
+        await Amplify.configure(amplifyconfig);
+        safePrint('AWS Amplify initialized successfully');
+      } else {
+        safePrint('AWS Amplify already configured');
+      }
+    } catch (e) {
+      safePrint('Error initializing AWS Amplify: $e');
+      // Continue without Amplify - will fall back to demo mode
+    }
+  }
+  
   runApp(const MyApp());
 }
 
