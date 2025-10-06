@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'services/s3_service.dart';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -84,8 +83,24 @@ class _ReportScreenState extends State<ReportScreen> {
         'userName': 'John Doe', // In real app, get from user profile
       };
 
-      // Send to AWS S3 (simulated)
-      final success = await _sendToAWSS3(reportData);
+      // Test AWS credentials first
+      print('Testing AWS credentials...');
+      final credentialTest = await S3Service.testCredentials();
+      if (!credentialTest) {
+        _showStatusMessage('AWS credentials failed. Please check AWS configuration.', isError: true);
+        return;
+      }
+
+      // Test S3 connection
+      print('Testing S3 connection...');
+      final connectionTest = await S3Service.testConnection();
+      if (!connectionTest) {
+        _showStatusMessage('S3 connection failed. Please check bucket permissions.', isError: true);
+        return;
+      }
+
+      // Send to AWS S3
+      final success = await S3Service.uploadReport(reportData);
 
       if (success) {
         _showStatusMessage('Report submitted successfully!', isError: false);
@@ -122,26 +137,6 @@ class _ReportScreenState extends State<ReportScreen> {
       print('Error getting location: $e');
     }
     return null;
-  }
-
-  Future<bool> _sendToAWSS3(Map<String, dynamic> data) async {
-    try {
-      // Simulate AWS S3 upload
-      // In a real app, you would use AWS SDK or API Gateway
-      final response = await http.post(
-        Uri.parse('https://your-aws-api-gateway-url/reports'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer your-auth-token',
-        },
-        body: jsonEncode(data),
-      );
-
-      return response.statusCode == 200;
-    } catch (e) {
-      print('Error sending to AWS S3: $e');
-      return false;
-    }
   }
 
   void _showStatusMessage(String message, {required bool isError}) {

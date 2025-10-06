@@ -1,0 +1,216 @@
+{
+  "sos_table": {
+    "TableName": "sos",
+    "KeySchema": [
+      {
+        "AttributeName": "id",
+        "KeyType": "HASH"
+      }
+    ],
+    "AttributeDefinitions": [
+      {
+        "AttributeName": "id",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "userId",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "timestamp",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "category",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "status",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "createdAt",
+        "AttributeType": "S"
+      }
+    ],
+    "GlobalSecondaryIndexes": [
+      {
+        "IndexName": "userId-timestamp-index",
+        "KeySchema": [
+          {
+            "AttributeName": "userId",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "timestamp",
+            "KeyType": "RANGE"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        },
+        "BillingMode": "PAY_PER_REQUEST"
+      },
+      {
+        "IndexName": "category-timestamp-index",
+        "KeySchema": [
+          {
+            "AttributeName": "category",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "timestamp",
+            "KeyType": "RANGE"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        },
+        "BillingMode": "PAY_PER_REQUEST"
+      },
+      {
+        "IndexName": "status-timestamp-index",
+        "KeySchema": [
+          {
+            "AttributeName": "status",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "timestamp",
+            "KeyType": "RANGE"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        },
+        "BillingMode": "PAY_PER_REQUEST"
+      },
+      {
+        "IndexName": "createdAt-index",
+        "KeySchema": [
+          {
+            "AttributeName": "createdAt",
+            "KeyType": "HASH"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        },
+        "BillingMode": "PAY_PER_REQUEST"
+      }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "TimeToLiveSpecification": {
+      "AttributeName": "ttl",
+      "Enabled": true
+    }
+  },
+  "report_table": {
+    "TableName": "report",
+    "KeySchema": [
+      {
+        "AttributeName": "id",
+        "KeyType": "HASH"
+      }
+    ],
+    "AttributeDefinitions": [
+      {
+        "AttributeName": "id",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "userId",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "timestamp",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "disasterType",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "location",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "createdAt",
+        "AttributeType": "S"
+      }
+    ],
+    "GlobalSecondaryIndexes": [
+      {
+        "IndexName": "userId-timestamp-index",
+        "KeySchema": [
+          {
+            "AttributeName": "userId",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "timestamp",
+            "KeyType": "RANGE"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        },
+        "BillingMode": "PAY_PER_REQUEST"
+      },
+      {
+        "IndexName": "disasterType-timestamp-index",
+        "KeySchema": [
+          {
+            "AttributeName": "disasterType",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "timestamp",
+            "KeyType": "RANGE"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        },
+        "BillingMode": "PAY_PER_REQUEST"
+      },
+      {
+        "IndexName": "location-timestamp-index",
+        "KeySchema": [
+          {
+            "AttributeName": "location",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "timestamp",
+            "KeyType": "RANGE"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        },
+        "BillingMode": "PAY_PER_REQUEST"
+      },
+      {
+        "IndexName": "createdAt-index",
+        "KeySchema": [
+          {
+            "AttributeName": "createdAt",
+            "KeyType": "HASH"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        },
+        "BillingMode": "PAY_PER_REQUEST"
+      }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "TimeToLiveSpecification": {
+      "AttributeName": "ttl",
+      "Enabled": true
+    }
+  }
+}
+
+

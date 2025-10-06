@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'chatbot.dart';
+import 'config.dart';
 
 // --- Text-Only Chatbot Screen ---
 
@@ -21,6 +22,7 @@ class _TextChatbotScreenState extends State<TextChatbotScreen> with TickerProvid
   @override
   void initState() {
     super.initState();
+    // Initialize chatbot service
     ChatbotService.initialize();
     
     _typingController = AnimationController(
@@ -30,6 +32,13 @@ class _TextChatbotScreenState extends State<TextChatbotScreen> with TickerProvid
     _typingAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _typingController, curve: Curves.easeInOut),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Ensure welcome message is shown when screen becomes active
+    ChatbotService.ensureWelcomeMessage();
   }
 
   @override
@@ -127,6 +136,11 @@ class _TextChatbotScreenState extends State<TextChatbotScreen> with TickerProvid
           ),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: () => _showDebugInfo(),
+            tooltip: 'Debug Info',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
@@ -364,6 +378,56 @@ class _TextChatbotScreenState extends State<TextChatbotScreen> with TickerProvid
     );
   }
 
+  void _showDebugInfo() {
+    final sessionInfo = ChatbotService.getSessionInfo();
+    final configStatus = _getConfigStatus();
+    final setupInstructions = _getSetupInstructions();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Debug Information'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Session Info:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text('Session ID: ${sessionInfo['sessionId']}'),
+              Text('User ID: ${sessionInfo['userId']}'),
+              Text('Demo Mode: ${sessionInfo['isDemoMode']}'),
+              Text('Config Valid: ${sessionInfo['isConfigValid']}'),
+              const SizedBox(height: 16),
+              
+              const Text('Configuration:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(configStatus),
+              const SizedBox(height: 16),
+              
+              const Text('Setup Instructions:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(setupInstructions),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _printConfigStatus();
+            },
+            child: const Text('Print to Console'),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _formatTime(DateTime timestamp) {
     final now = DateTime.now();
     final difference = now.difference(timestamp);
@@ -377,6 +441,31 @@ class _TextChatbotScreenState extends State<TextChatbotScreen> with TickerProvid
     } else {
       return '${timestamp.day}/${timestamp.month} ${timestamp.hour}:${timestamp.minute.toString().padLeft(2, '0')}';
     }
+  }
+
+  String _getConfigStatus() {
+    return 'AWS Amplify Configuration:\n'
+        '• Bot Name: ${Config.lexBotName}\n'
+        '• Bot ID: ${Config.lexBotId}\n'
+        '• Bot Alias: ${Config.lexBotAlias}\n'
+        '• Region: ${Config.amplifyRegion}\n'
+        '• Use Amplify: ${Config.useAmplify}\n'
+        '• Config Valid: ${Config.isAmplifyConfigValid}';
+  }
+
+  String _getSetupInstructions() {
+    return 'Setup Instructions:\n'
+        '1. Configure AWS Amplify backend\n'
+        '2. Set up Amazon Lex bot\n'
+        '3. Update configuration in config.dart\n'
+        '4. Deploy with amplify push';
+  }
+
+  void _printConfigStatus() {
+    print('=== Configuration Status ===');
+    print(_getConfigStatus());
+    print('\n=== Setup Instructions ===');
+    print(_getSetupInstructions());
   }
 }
 

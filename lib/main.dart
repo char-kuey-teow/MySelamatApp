@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
+import 'amplifyconfiguration.dart';
 import 'sos-button.dart';
 import 'text_chatbot.dart';
 import 'profile.dart';
 import 'flood-map.dart';
+import 'config.dart';
 
 // -------------------------------------------------------------
 // Home Screen with AppBar wrapper for FloodMapWidget
@@ -53,7 +57,7 @@ class MainNavigator extends StatefulWidget {
 }
 
 class _MainNavigatorState extends State<MainNavigator> {
-  int _selectedIndex = 0;
+  int _selectedIndex = 4; // Start with Profile page (index 4)
 
   static const primaryColor = Color(0xFF2254C5);
 
@@ -92,10 +96,7 @@ class _MainNavigatorState extends State<MainNavigator> {
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
         BottomNavigationBarItem(icon: Icon(Icons.sos_outlined), label: 'SOS'),
         BottomNavigationBarItem(icon: Icon(Icons.home_work), label: 'Shelter'),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.chat),
-          label: 'Chat',
-        ),
+        BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
       onTap: _onItemTapped,
@@ -118,7 +119,33 @@ class _MainNavigatorState extends State<MainNavigator> {
 // --- Example `main` function to run the app ---
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  
+  // Initialize Firebase (only if not running on web without proper config)
+  try {
+    await Firebase.initializeApp();
+    safePrint('Firebase initialized successfully');
+  } catch (e) {
+    safePrint('Firebase initialization failed: $e');
+    safePrint('Continuing without Firebase...');
+    // Continue without Firebase - app will work with demo mode
+  }
+  
+  // Initialize AWS Amplify if configured
+  if (Config.useAmplify) {
+    try {
+      if (!Amplify.isConfigured) {
+        await Amplify.addPlugin(AmplifyAuthCognito());
+        await Amplify.configure(amplifyconfig);
+        safePrint('AWS Amplify initialized successfully');
+      } else {
+        safePrint('AWS Amplify already configured');
+      }
+    } catch (e) {
+      safePrint('Error initializing AWS Amplify: $e');
+      // Continue without Amplify - will fall back to demo mode
+    }
+  }
+  
   runApp(const MyApp());
 }
 
