@@ -296,6 +296,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         email: 'demo@myselamat.com',
         displayName: 'Demo User',
         photoUrl: null,
+        phoneNumber: '+60 12-345 6789',
         address: 'Demo Address, Kuala Lumpur',
         phoneNumber: '+60 12-345-6789',
         floodRegions: ['Kuala Lumpur', 'Selangor'],
@@ -408,6 +409,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Debug method to test SharedPreferences persistence
+  Future<void> _testPersistence() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userData = prefs.getString('userProfile');
+
+      print('=== PERSISTENCE TEST ===');
+      print('Raw SharedPreferences data: $userData');
+
+      if (userData != null) {
+        final userMap = jsonDecode(userData);
+        final testProfile = UserProfile.fromJson(userMap);
+        print('Parsed profile data:');
+        print('- ID: ${testProfile.id}');
+        print('- Name: ${testProfile.displayName}');
+        print('- Email: ${testProfile.email}');
+        print('- Phone: ${testProfile.phoneNumber}');
+        print('- Address: ${testProfile.address}');
+        print('- Regions: ${testProfile.floodRegions}');
+      } else {
+        print('No data found in SharedPreferences');
+      }
+      print('========================');
+    } catch (e) {
+      print('Error testing persistence: $e');
+    }
+  }
+
+  void _editPhoneNumber() {
+    final controller = TextEditingController(
+      text: _userProfile!.phoneNumberOrEmpty,
+    );
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Edit Phone Number'),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              hintText: 'Enter your phone number (e.g., +60 12-345 6789)',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.phone),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                _updatePhoneNumber(controller.text.trim());
+                Navigator.of(context).pop();
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _editAddress() {
     final controller = TextEditingController(text: _userProfile!.address);
 
@@ -444,6 +510,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _updatePhoneNumber(String newPhoneNumber) async {
+    setState(() => _isLoading = true);
+
+    try {
+      final updatedProfile = UserProfile(
+        id: _userProfile!.id,
+        email: _userProfile!.email,
+        displayName: _userProfile!.displayName,
+        photoUrl: _userProfile!.photoUrl,
+        phoneNumber: newPhoneNumber,
+        address: _userProfile!.address,
+        floodRegions: _userProfile!.floodRegions,
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userProfile', jsonEncode(updatedProfile.toJson()));
+
+      // Debug: Verify the data was saved
+      final savedData = prefs.getString('userProfile');
+      print('Phone number updated and saved to SharedPreferences: $savedData');
+
+      setState(() {
+        _userProfile = updatedProfile;
+      });
+
+      _showSuccessSnackBar('Phone number updated successfully!');
+    } catch (error) {
+      print('Error updating phone number: $error');
+      _showErrorSnackBar('Failed to update phone number');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _updateAddress(String newAddress) async {
     setState(() => _isLoading = true);
 
@@ -453,6 +553,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         email: _userProfile!.email,
         displayName: _userProfile!.displayName,
         photoUrl: _userProfile!.photoUrl,
+        phoneNumber: _userProfile!.phoneNumber,
         address: newAddress,
         phoneNumber: _userProfile!.phoneNumber,
         floodRegions: _userProfile!.floodRegions,
@@ -460,6 +561,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('userProfile', jsonEncode(updatedProfile.toJson()));
+
+      // Debug: Verify the data was saved
+      final savedData = prefs.getString('userProfile');
+      print('Address updated and saved to SharedPreferences: $savedData');
 
       setState(() {
         _userProfile = updatedProfile;
@@ -589,6 +694,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         email: _userProfile!.email,
         displayName: _userProfile!.displayName,
         photoUrl: _userProfile!.photoUrl,
+        phoneNumber: _userProfile!.phoneNumber,
         address: _userProfile!.address,
         phoneNumber: _userProfile!.phoneNumber,
         floodRegions: updatedRegions,
@@ -596,6 +702,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('userProfile', jsonEncode(updatedProfile.toJson()));
+
+      // Debug: Verify the data was saved
+      final savedData = prefs.getString('userProfile');
+      print('Region added and saved to SharedPreferences: $savedData');
 
       setState(() {
         _userProfile = updatedProfile;
@@ -622,6 +732,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         email: _userProfile!.email,
         displayName: _userProfile!.displayName,
         photoUrl: _userProfile!.photoUrl,
+        phoneNumber: _userProfile!.phoneNumber,
         address: _userProfile!.address,
         phoneNumber: _userProfile!.phoneNumber,
         floodRegions: updatedRegions,
@@ -629,6 +740,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('userProfile', jsonEncode(updatedProfile.toJson()));
+
+      // Debug: Verify the data was saved
+      final savedData = prefs.getString('userProfile');
+      print('Region deleted and saved to SharedPreferences: $savedData');
 
       setState(() {
         _userProfile = updatedProfile;
@@ -783,7 +898,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(20.0),
+              padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
                   CircleAvatar(
@@ -797,7 +912,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ? const Icon(Icons.person, size: 50)
                             : null,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   Text(
                     _userProfile!.displayName,
                     style: const TextStyle(
@@ -806,10 +921,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       color: Colors.black,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     _userProfile!.email,
                     style: const TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _userProfile!.hasPhoneNumber
+                            ? _userProfile!.phoneNumber!
+                            : 'No phone number',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color:
+                              _userProfile!.hasPhoneNumber
+                                  ? Colors.grey
+                                  : Colors.grey.shade400,
+                          fontStyle:
+                              _userProfile!.hasPhoneNumber
+                                  ? FontStyle.normal
+                                  : FontStyle.italic,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: _editPhoneNumber,
+                        child: Icon(
+                          Icons.edit,
+                          size: 16,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -832,6 +978,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // Flood Warning Regions
           _buildFloodRegionsSection(),
           const SizedBox(height: 24),
+
+          // Debug Test Button (temporary)
+          SizedBox(
+            width: double.infinity,
+            height: 36,
+            child: OutlinedButton.icon(
+              onPressed: _testPersistence,
+              icon: const Icon(Icons.bug_report, size: 16),
+              label: const Text(
+                'Test Persistence (Debug)',
+                style: TextStyle(fontSize: 12),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.orange,
+                side: const BorderSide(color: Colors.orange),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
 
           // Sign Out Button
           SizedBox(
@@ -862,18 +1030,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.start,
               children: [
                 Icon(icon, color: const Color(0xFF2254C5)),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Text(
                   title,
-                  textAlign: TextAlign.center,
+                  textAlign: TextAlign.left,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 15,
                     fontWeight: FontWeight.w500,
                     color: Colors.grey,
                   ),
@@ -889,7 +1057,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 2),
             Text(
               value,
               textAlign: TextAlign.left,
@@ -955,6 +1123,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildPhoneNumberSection() {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.phone, color: Color(0xFF2254C5)),
+                const SizedBox(width: 10),
+                const Text(
+                  'Phone Number',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => _editPhoneNumber(),
+                  icon: const Icon(
+                    Icons.edit,
+                    size: 20,
+                    color: Color(0xFF2254C5),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _userProfile!.phoneNumber.isNotEmpty
+                  ? _userProfile!.phoneNumber
+                  : 'No phone number provided',
+              textAlign: TextAlign.left,
+              style: TextStyle(
+                fontSize: 16,
+                color:
+                    _userProfile!.phoneNumber.isNotEmpty
+                        ? Colors.black
+                        : Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildFloodRegionsSection() {
     return Card(
       elevation: 1,
@@ -962,28 +1184,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.start,
               children: [
                 const Icon(Icons.warning, color: Color(0xFF2254C5)),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 const Text(
                   'Subscribed Flood Warning Region',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
                     color: Colors.black,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             ..._userProfile!.floodRegions.asMap().entries.map(
               (entry) => Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
+                padding: const EdgeInsets.only(bottom: 1),
                 child: Row(
                   children: [
                     const Icon(
@@ -991,7 +1213,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       size: 16,
                       color: Colors.grey,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         entry.value,
@@ -1014,7 +1236,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             if (_userProfile!.floodRegions.length < 5)
               ElevatedButton.icon(
                 onPressed: _addNewRegion,
@@ -1052,6 +1274,7 @@ class AdditionalInfoForm extends StatefulWidget {
 
 class _AdditionalInfoFormState extends State<AdditionalInfoForm> {
   final _formKey = GlobalKey<FormState>();
+  final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
   final _phoneController = TextEditingController();
   final List<TextEditingController> _regionControllers = [
@@ -1065,6 +1288,7 @@ class _AdditionalInfoFormState extends State<AdditionalInfoForm> {
 
   @override
   void dispose() {
+    _phoneController.dispose();
     _addressController.dispose();
     _phoneController.dispose();
     for (var controller in _regionControllers) {
@@ -1348,6 +1572,7 @@ class UserProfile {
   final String email;
   final String displayName;
   final String? photoUrl;
+  final String? phoneNumber;
   final String address;
   final String phoneNumber;
   final List<String> floodRegions;
@@ -1357,6 +1582,7 @@ class UserProfile {
     required this.email,
     required this.displayName,
     this.photoUrl,
+    this.phoneNumber,
     required this.address,
     required this.phoneNumber,
     required this.floodRegions,
@@ -1368,6 +1594,7 @@ class UserProfile {
       'email': email,
       'displayName': displayName,
       'photoUrl': photoUrl,
+      'phoneNumber': phoneNumber,
       'address': address,
       'phoneNumber': phoneNumber,
       'floodRegions': floodRegions,
@@ -1376,13 +1603,17 @@ class UserProfile {
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
-      id: json['id'],
-      email: json['email'],
-      displayName: json['displayName'],
+      id: json['id'] ?? '',
+      email: json['email'] ?? '',
+      displayName: json['displayName'] ?? 'User',
       photoUrl: json['photoUrl'],
       address: json['address'],
       phoneNumber: json['phoneNumber'] ?? '', // Handle backward compatibility
       floodRegions: List<String>.from(json['floodRegions']),
     );
   }
+
+  // Helper method to get phone number safely
+  String get phoneNumberOrEmpty => phoneNumber ?? '';
+  bool get hasPhoneNumber => phoneNumber != null && phoneNumber!.isNotEmpty;
 }

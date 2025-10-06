@@ -255,17 +255,26 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
 
       if (userData != null) {
         final userMap = jsonDecode(userData);
+        final userProfile = UserProfile.fromJson(userMap);
+
         setState(() {
-          _currentUserProfile = UserProfile.fromJson(userMap);
-          _userId = _currentUserProfile!.id;
-          _userName = _currentUserProfile!.displayName;
+          _currentUserProfile = userProfile;
+          _userId = userProfile.id;
+          _userName = userProfile.displayName;
         });
-        print('User profile loaded: ${_currentUserProfile!.displayName}');
+
+        // Debug: Show what profile data was loaded
+        print('SOS: User profile loaded from SharedPreferences:');
+        print('- Name: ${userProfile.displayName}');
+        print('- Email: ${userProfile.email}');
+        print('- Phone: ${userProfile.phoneNumber ?? "null"}');
+        print('- Address: ${userProfile.address}');
+        print('- Regions: ${userProfile.floodRegions}');
       } else {
-        print('No user profile found, using demo data');
+        print('SOS: No user profile found, using demo data');
       }
     } catch (e) {
-      print('Error loading user profile: $e');
+      print('SOS: Error loading user profile: $e');
       // Continue with demo data
     }
   }
@@ -896,6 +905,11 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
         },
       };
 
+      // Add phone number only if it exists and is not empty
+      if (_currentUserProfile?.hasPhoneNumber == true) {
+        sosData['userPhone'] = _currentUserProfile!.phoneNumber!;
+      }
+
       // Send SOS data based on configuration
       if (Config.useDemoMode) {
         // Simulate successful SOS sending for demo purposes
@@ -1385,6 +1399,13 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                 value: _currentUserProfile?.email ?? 'demo@myselamat.com',
                 color: Colors.white70,
               ),
+              if (_currentUserProfile?.hasPhoneNumber == true)
+                _buildDetailRow(
+                  icon: Icons.phone_outlined,
+                  label: 'Phone',
+                  value: _currentUserProfile!.phoneNumber!,
+                  color: Colors.white70,
+                ),
               _buildDetailRow(
                 icon: Icons.warning_amber_rounded,
                 label: 'Incident',
