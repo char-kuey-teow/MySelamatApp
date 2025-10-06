@@ -48,9 +48,16 @@ class ChatbotService {
     _isInitialized = true;
   }
 
+  // Method to ensure welcome message is shown when user navigates to chatbot
+  static void ensureWelcomeMessage() {
+    if (_messages.isEmpty) {
+      _addWelcomeMessage();
+    }
+  }
+
   static void _addWelcomeMessage() {
     _messages.add(ChatMessage(
-      text: "Hello! I'm SelamatBot, your emergency assistance chatbot powered by AWS Amplify and Amazon Lex. I can help you with emergency assistance, flood information, and weather updates. How can I help you today?",
+      text: "Hello! I'm SelamatBot, your emergency assistance chatbot. I can help you with emergency assistance, flood information, and weather updates. How can I help you today?",
       isUser: false,
       timestamp: DateTime.now(),
       quickActions: [

@@ -22,6 +22,7 @@ class _TextChatbotScreenState extends State<TextChatbotScreen> with TickerProvid
   @override
   void initState() {
     super.initState();
+    // Initialize chatbot service
     ChatbotService.initialize();
     
     _typingController = AnimationController(
@@ -31,6 +32,13 @@ class _TextChatbotScreenState extends State<TextChatbotScreen> with TickerProvid
     _typingAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _typingController, curve: Curves.easeInOut),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Ensure welcome message is shown when screen becomes active
+    ChatbotService.ensureWelcomeMessage();
   }
 
   @override

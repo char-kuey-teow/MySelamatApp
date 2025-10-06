@@ -33,7 +33,7 @@ class AmplifyInteractionsResponse {
 class AmplifyInteractionsService {
   static String? _sessionId;
   static String? _userId;
-  static Map<String, dynamic> _sessionAttributes = {};
+  static final Map<String, dynamic> _sessionAttributes = {};
   static String? _lastIntentName;
   static Map<String, dynamic>? _lastSlots;
   static bool _isInitialized = false;
@@ -198,8 +198,27 @@ class AmplifyInteractionsService {
   static AmplifyInteractionsResponse _getMockResponse(String message) {
     final lowerMessage = message.toLowerCase();
     
+    // Help intent
+    if (lowerMessage.contains('help') || lowerMessage.contains('guide') || lowerMessage.contains('what can you do')) {
+      return AmplifyInteractionsResponse(
+        message: "I'm here to help you with emergency assistance and safety information. Here's what I can do:\n\n🚨 Emergency Assistance:\n• Connect you with emergency services\n• Provide emergency guidance and safety protocols\n• Help with medical, fire, or police emergencies\n\n🌊 Flood Information:\n• Current flood alerts and risk levels\n• Safety tips and evacuation guidance\n• Emergency kit recommendations\n\n🌤️ Weather Updates:\n• Real-time weather conditions\n• Severe weather alerts\n• Forecast and safety recommendations\n\nHow can I assist you today?",
+        intentName: 'HelpIntent',
+        sessionId: _sessionId,
+        quickActions: [
+          {
+            'title': 'Available Services',
+            'buttons': [
+              {'text': 'Emergency Help', 'value': 'emergency_help'},
+              {'text': 'Flood Info', 'value': 'flood_info'},
+              {'text': 'Weather Info', 'value': 'weather_info'},
+            ]
+          }
+        ],
+      );
+    }
+    
     // Emergency intent
-    if (lowerMessage.contains('emergency') || lowerMessage.contains('help') || lowerMessage.contains('sos')) {
+    if (lowerMessage.contains('emergency') || lowerMessage.contains('sos')) {
       return AmplifyInteractionsResponse(
         message: "🚨 EMERGENCY ASSISTANCE\n\nI understand you need emergency help. Here are your options:\n\n• Press the SOS button for immediate emergency services\n• Call 999 for police, fire, or medical emergencies\n• Use the 'Mark Safe' feature to let others know you're okay\n\nWhat type of emergency are you experiencing?",
         intentName: 'EmergencyIntent',
@@ -209,8 +228,9 @@ class AmplifyInteractionsService {
             'title': 'Emergency Actions',
             'buttons': [
               {'text': 'Call 999', 'value': 'call_emergency'},
-              {'text': 'Medical Help', 'value': 'medical_help'},
+              {'text': 'Medical Emergency', 'value': 'medical_help'},
               {'text': 'Fire Emergency', 'value': 'fire_emergency'},
+              {'text': 'Police Emergency', 'value': 'police_emergency'},
             ]
           }
         ],
@@ -220,7 +240,7 @@ class AmplifyInteractionsService {
     // Flood information intent
     if (lowerMessage.contains('flood') || lowerMessage.contains('water') || lowerMessage.contains('rain')) {
       return AmplifyInteractionsResponse(
-        message: "🌊 FLOOD INFORMATION\n\nCurrent flood status in your area:\n\n• Risk Level: ORANGE (High risk in 24h)\n• Location: Mukim Badang\n• Radius: 1km\n• Last Updated: ${DateTime.now().toString().substring(0, 19)}\n\nStay alert and be prepared to evacuate if necessary.",
+        message: "🌊 FLOOD INFORMATION\n\nCurrent flood status in your area:\n\n• Risk Level: ORANGE (High risk in 24h)\n• Location: Mukim Badang, Kota Bharu\n• Radius: 1km from your location\n• Last Updated: ${DateTime.now().toString().substring(0, 19)}\n• Water Level: Rising (2.5m above normal)\n• Evacuation Status: Standby\n\nStay alert and be prepared to evacuate if necessary.",
         intentName: 'FloodInfoIntent',
         sessionId: _sessionId,
         quickActions: [
@@ -230,6 +250,7 @@ class AmplifyInteractionsService {
               {'text': 'Flood Alerts', 'value': 'flood_alerts'},
               {'text': 'Safety Tips', 'value': 'safety_tips'},
               {'text': 'Emergency Kit', 'value': 'emergency_kit'},
+              {'text': 'Evacuation Routes', 'value': 'evacuation_routes'},
             ]
           }
         ],
@@ -239,7 +260,7 @@ class AmplifyInteractionsService {
     // Weather information intent
     if (lowerMessage.contains('weather') || lowerMessage.contains('forecast') || lowerMessage.contains('temperature')) {
       return AmplifyInteractionsResponse(
-        message: "🌤️ WEATHER FORECAST\n\nCurrent weather conditions:\n\n• Temperature: 28°C\n• Humidity: 85%\n• Rain: Heavy showers expected\n• Wind: 15 km/h from Southeast\n• Visibility: 5km\n\n⚠️ Weather Alert: Heavy rainfall expected for the next 6 hours. Stay indoors and avoid unnecessary travel.",
+        message: "🌤️ WEATHER FORECAST\n\nCurrent weather conditions:\n\n• Temperature: 28°C (feels like 32°C)\n• Humidity: 85%\n• Rain: Heavy showers expected\n• Wind: 15 km/h from Southeast\n• Visibility: 5km\n• UV Index: 8 (Very High)\n\n⚠️ Weather Alert: Heavy rainfall expected for the next 6 hours. Stay indoors and avoid unnecessary travel.",
         intentName: 'WeatherInfoIntent',
         sessionId: _sessionId,
         quickActions: [
@@ -249,6 +270,62 @@ class AmplifyInteractionsService {
               {'text': 'Hourly Forecast', 'value': 'hourly_forecast'},
               {'text': 'Weather Alerts', 'value': 'weather_alerts'},
               {'text': 'Safety Tips', 'value': 'safety_tips'},
+              {'text': '7-Day Forecast', 'value': 'weekly_forecast'},
+            ]
+          }
+        ],
+      );
+    }
+    
+    // Handle specific quick action responses
+    if (lowerMessage.contains('call_emergency') || lowerMessage.contains('medical_help') || lowerMessage.contains('fire_emergency') || lowerMessage.contains('police_emergency')) {
+      return AmplifyInteractionsResponse(
+        message: "🚨 EMERGENCY RESPONSE\n\nI'm connecting you to emergency services now:\n\n• Calling emergency services (999)\n• Sharing your location with emergency responders\n• Notifying your emergency contacts\n• Providing step-by-step emergency guidance\n\nStay calm and follow safety protocols. Emergency services are on their way.",
+        intentName: 'EmergencyResponseIntent',
+        sessionId: _sessionId,
+        quickActions: [
+          {
+            'title': 'Emergency Options',
+            'buttons': [
+              {'text': 'Share Location', 'value': 'share_location'},
+              {'text': 'Call Contacts', 'value': 'call_contacts'},
+              {'text': 'Safety Checklist', 'value': 'safety_checklist'},
+            ]
+          }
+        ],
+      );
+    }
+    
+    if (lowerMessage.contains('flood_alerts') || lowerMessage.contains('safety_tips') || lowerMessage.contains('emergency_kit') || lowerMessage.contains('evacuation_routes')) {
+      return AmplifyInteractionsResponse(
+        message: "🌊 FLOOD SAFETY INFORMATION\n\nCurrent flood safety status:\n\n• Alert Level: ORANGE\n• Recommended Action: Prepare to evacuate\n• Safe Routes: Main roads clear, avoid low-lying areas\n• Emergency Kit: Water, food, flashlight, first aid\n\nStay informed and follow official evacuation orders if issued.",
+        intentName: 'FloodResponseIntent',
+        sessionId: _sessionId,
+        quickActions: [
+          {
+            'title': 'Flood Options',
+            'buttons': [
+              {'text': 'View Safe Routes', 'value': 'safe_routes'},
+              {'text': 'Emergency Kit List', 'value': 'kit_list'},
+              {'text': 'Evacuation Centers', 'value': 'evacuation_centers'},
+            ]
+          }
+        ],
+      );
+    }
+    
+    if (lowerMessage.contains('hourly_forecast') || lowerMessage.contains('weather_alerts') || lowerMessage.contains('weekly_forecast')) {
+      return AmplifyInteractionsResponse(
+        message: "🌤️ DETAILED WEATHER INFORMATION\n\nExtended weather forecast:\n\n• Next 6 Hours: Heavy rain, 15-20mm expected\n• Temperature: 26-30°C\n• Wind: 10-20 km/h Southeast\n• Humidity: 80-90%\n\n⚠️ Severe Weather Warning: Flash floods possible in low-lying areas. Stay indoors and avoid unnecessary travel.",
+        intentName: 'WeatherResponseIntent',
+        sessionId: _sessionId,
+        quickActions: [
+          {
+            'title': 'Weather Options',
+            'buttons': [
+              {'text': 'Radar View', 'value': 'radar_view'},
+              {'text': 'Storm Tracking', 'value': 'storm_tracking'},
+              {'text': 'Weather History', 'value': 'weather_history'},
             ]
           }
         ],
@@ -257,7 +334,7 @@ class AmplifyInteractionsService {
     
     // Default response
     return AmplifyInteractionsResponse(
-      message: "Hello! I'm SelamatBot, your emergency assistance chatbot powered by AWS Amplify Interactions and Amazon Lex. I can help you with:\n\n• Emergency assistance and SOS\n• Flood information and alerts\n• Weather updates and forecasts\n• Safety tips and guidelines\n\nHow can I assist you today?",
+      message: "Hello! I'm SelamatBot, your emergency assistance chatbot. I can help you with:\n\n• Emergency assistance and SOS\n• Flood information and alerts\n• Weather updates and forecasts\n• Safety tips and guidelines\n\nHow can I assist you today?",
       intentName: 'WelcomeIntent',
       sessionId: _sessionId,
       quickActions: [

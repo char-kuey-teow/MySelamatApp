@@ -465,8 +465,15 @@ class _MainNavigatorState extends State<MainNavigator> {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Initialize Firebase
-  await Firebase.initializeApp();
+  // Initialize Firebase (only if not running on web without proper config)
+  try {
+    await Firebase.initializeApp();
+    safePrint('Firebase initialized successfully');
+  } catch (e) {
+    safePrint('Firebase initialization failed: $e');
+    safePrint('Continuing without Firebase...');
+    // Continue without Firebase - app will work with demo mode
+  }
   
   // Initialize AWS Amplify if configured
   if (Config.useAmplify) {
