@@ -70,3 +70,7 @@ amplifytools.xcconfig
 .secret-*
 **.sample
 #amplify-do-not-edit-end
+
+# Android signing keys
+android/app/my-release-key.jks
+android/key.properties

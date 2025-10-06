@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:async';
+import 'firebase_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -11,15 +13,16 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+  final AuthService _authService = AuthService();
 
   bool _isLoggedIn = false;
-  GoogleSignInAccount? _currentUser;
+  User? _firebaseUser;
   UserProfile? _userProfile;
   bool _isLoading = false;
 
   // Form controllers
   final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final List<TextEditingController> _regionControllers = [
     TextEditingController(),
     TextEditingController(),
@@ -28,15 +31,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
     TextEditingController(),
   ];
 
+  // Performance optimization: Cache frequently used values
+  static const Duration _loadingTimeout = Duration(seconds: 10);
+
   @override
   void initState() {
     super.initState();
     _checkLoginStatus();
+    _setupAuthListener();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh login status when returning to this screen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _refreshLoginStatus();
+      }
+    });
+  }
+
+  void _setupAuthListener() {
+    _authService.authStateChanges.listen((User? user) {
+      if (mounted) {
+        setState(() {
+          _firebaseUser = user;
+          _isLoggedIn = user != null;
+        });
+
+        if (user != null) {
+          _loadUserProfile();
+        } else {
+          // Only clear data if we're not in demo mode
+          _checkDemoModeBeforeClearing();
+        }
+      }
+    });
+  }
+
+  Future<void> _checkDemoModeBeforeClearing() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+
+    if (!isLoggedIn) {
+      // Not in demo mode either, clear the data
+      _clearUserData();
+    }
+    // If in demo mode, keep the logged in state
+  }
+
+  Future<void> _refreshLoginStatus() async {
+    // Only refresh if we're not already logged in
+    if (!_isLoggedIn) {
+      await _checkLoginStatus();
+    }
   }
 
   @override
   void dispose() {
     _addressController.dispose();
+    _phoneController.dispose();
     for (var controller in _regionControllers) {
       controller.dispose();
     }
@@ -44,118 +99,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _checkLoginStatus() async {
+    if (!mounted) return;
+
     setState(() => _isLoading = true);
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-
-      if (isLoggedIn) {
-        final userData = prefs.getString('userProfile');
-        if (userData != null) {
-          try {
-            final userMap = jsonDecode(userData);
-            final userProfile = UserProfile.fromJson(userMap);
-
-            // Debug: Show what data was loaded
-            print('Profile loaded from SharedPreferences:');
-            print('- Name: ${userProfile.displayName}');
-            print('- Email: ${userProfile.email}');
-            print('- Phone: ${userProfile.phoneNumber ?? "null"}');
-            print('- Address: ${userProfile.address}');
-            print('- Regions: ${userProfile.floodRegions}');
-
-            setState(() {
-              _isLoggedIn = true;
-              _userProfile = userProfile;
-              _addressController.text = userProfile.address;
-              for (
-                int i = 0;
-                i < userProfile.floodRegions.length && i < 5;
-                i++
-              ) {
-                _regionControllers[i].text = userProfile.floodRegions[i];
-              }
-            });
-          } catch (e) {
-            print('Error parsing user profile: $e');
-            // Clear corrupted data and force re-login
-            await prefs.clear();
-            setState(() {
-              _isLoggedIn = false;
-              _currentUser = null;
-              _userProfile = null;
-            });
-          }
-        } else {
-          // User is logged in but no profile data - try to get current user
-          try {
-            final currentUser = await _googleSignIn.signInSilently();
-            if (currentUser != null) {
-              setState(() {
-                _currentUser = currentUser;
-                _isLoggedIn = true;
-              });
-              // Show additional info form
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _showAdditionalInfoForm();
-              });
-            } else {
-              // No current user, clear login state
-              await prefs.clear();
-              setState(() {
-                _isLoggedIn = false;
-                _currentUser = null;
-                _userProfile = null;
-              });
-            }
-          } catch (e) {
-            print('Error getting current user: $e');
-            // Clear login state on error
-            await prefs.clear();
-            setState(() {
-              _isLoggedIn = false;
-              _currentUser = null;
-              _userProfile = null;
-            });
-          }
-        }
-      }
+      // Add timeout to prevent hanging
+      await Future.any([
+        _performLoginCheck(),
+        Future.delayed(
+          _loadingTimeout,
+          () => throw TimeoutException('Login check timeout', _loadingTimeout),
+        ),
+      ]);
     } catch (e) {
       print('Error checking login status: $e');
+      if (mounted) {
+        _showErrorSnackBar('Failed to check login status');
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
-
-    try {
-      // First, try to sign out any existing user to ensure clean state
-      await _googleSignIn.signOut();
-
-      // Then attempt to sign in
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-
-      if (googleUser != null) {
-        print('Google Sign-In successful: ${googleUser.email}');
-
+  Future<void> _performLoginCheck() async {
+    // Check Firebase auth state first
+    final currentUser = _authService.currentUser;
+    if (currentUser != null) {
+      if (mounted) {
         setState(() {
-          _currentUser = googleUser;
+          _firebaseUser = currentUser;
           _isLoggedIn = true;
         });
+        await _loadUserProfile();
+      }
+    } else {
+      // Check SharedPreferences for demo mode
+      final prefs = await SharedPreferences.getInstance();
+      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
 
-        // Check if user already has profile data
-        final prefs = await SharedPreferences.getInstance();
+      if (isLoggedIn && mounted) {
         final userData = prefs.getString('userProfile');
-
         if (userData != null) {
-          // User has existing profile, load it
           final userMap = jsonDecode(userData);
           setState(() {
+            _isLoggedIn = true; // Ensure this is set for demo mode
             _userProfile = UserProfile.fromJson(userMap);
             _addressController.text = _userProfile!.address;
+            _phoneController.text = _userProfile!.phoneNumber;
             for (
               int i = 0;
               i < _userProfile!.floodRegions.length && i < 5;
@@ -164,44 +157,132 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _regionControllers[i].text = _userProfile!.floodRegions[i];
             }
           });
-          _showSuccessSnackBar('Welcome back, ${googleUser.displayName}!');
         } else {
-          // User needs to fill additional info
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _showAdditionalInfoForm();
+          // Demo mode flag exists but no profile data, set logged in state anyway
+          setState(() {
+            _isLoggedIn = true;
           });
         }
       } else {
-        // User cancelled the sign-in
-        _showErrorSnackBar('Sign-in was cancelled');
+        // Not logged in via Firebase or demo mode
+        setState(() {
+          _isLoggedIn = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadUserProfile() async {
+    if (!mounted) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userData = prefs.getString('userProfile');
+
+      if (userData != null && mounted) {
+        final userMap = jsonDecode(userData);
+        setState(() {
+          _userProfile = UserProfile.fromJson(userMap);
+          _addressController.text = _userProfile!.address;
+          _phoneController.text = _userProfile!.phoneNumber;
+          for (int i = 0; i < _userProfile!.floodRegions.length && i < 5; i++) {
+            _regionControllers[i].text = _userProfile!.floodRegions[i];
+          }
+        });
+      } else if (_firebaseUser != null && mounted) {
+        // User is authenticated but no profile data - show additional info form
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _showAdditionalInfoForm();
+          }
+        });
+      }
+    } catch (e) {
+      print('Error loading user profile: $e');
+      if (mounted) {
+        _showErrorSnackBar('Failed to load user profile');
+      }
+    }
+  }
+
+  void _clearUserData() {
+    setState(() {
+      _userProfile = null;
+      _addressController.clear();
+      _phoneController.clear();
+      for (var controller in _regionControllers) {
+        controller.clear();
+      }
+    });
+  }
+
+  Future<void> _signInWithGoogle() async {
+    if (!mounted) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Add timeout to prevent hanging
+      final userCredential = await Future.any([
+        _authService.signInWithGoogle(context),
+        Future.delayed(
+          _loadingTimeout,
+          () =>
+              throw TimeoutException('Google Sign-In timeout', _loadingTimeout),
+        ),
+      ]);
+
+      if (userCredential != null && mounted) {
+        final user = userCredential.user;
+        print('Firebase Google Sign-In successful: ${user?.email}');
+
+        setState(() {
+          _firebaseUser = user;
+          _isLoggedIn = true;
+        });
+
+        // Check if user already has profile data
+        final prefs = await SharedPreferences.getInstance();
+        final userData = prefs.getString('userProfile');
+
+        if (userData != null && mounted) {
+          // User has existing profile, load it
+          final userMap = jsonDecode(userData);
+          setState(() {
+            _userProfile = UserProfile.fromJson(userMap);
+            _addressController.text = _userProfile!.address;
+            _phoneController.text = _userProfile!.phoneNumber;
+            for (
+              int i = 0;
+              i < _userProfile!.floodRegions.length && i < 5;
+              i++
+            ) {
+              _regionControllers[i].text = _userProfile!.floodRegions[i];
+            }
+          });
+          _showSuccessSnackBar('Welcome back, ${user?.displayName ?? 'User'}!');
+        } else if (mounted) {
+          // User needs to fill additional info
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _showAdditionalInfoForm();
+            }
+          });
+        }
       }
     } catch (error) {
       print('Error signing in with Google: $error');
-
-      String errorMessage = 'Failed to sign in with Google';
-
-      if (error.toString().contains('network_error') ||
-          error.toString().contains('network')) {
-        errorMessage = 'Network error. Please check your internet connection.';
-      } else if (error.toString().contains('sign_in_failed') ||
-          error.toString().contains('sign_in')) {
-        errorMessage = 'Sign-in failed. Please try again.';
-      } else if (error.toString().contains('sign_in_canceled') ||
-          error.toString().contains('canceled')) {
-        errorMessage = 'Sign-in was cancelled.';
-      } else if (error.toString().contains('play_services') ||
-          error.toString().contains('play')) {
-        errorMessage =
-            'Google Play Services not available. Please update your device.';
-      } else if (error.toString().contains('developer_error') ||
-          error.toString().contains('ApiException: 10')) {
-        errorMessage =
-            'Google Sign-In not configured. Please use Demo Mode for testing.';
+      if (mounted) {
+        if (error is TimeoutException) {
+          _showErrorSnackBar('Sign-in timed out. Please try again.');
+        } else {
+          _showErrorSnackBar('Failed to sign in with Google');
+        }
       }
-
-      _showErrorSnackBar(errorMessage);
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -217,6 +298,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         photoUrl: null,
         phoneNumber: '+60 12-345 6789',
         address: 'Demo Address, Kuala Lumpur',
+        phoneNumber: '+60 12-345-6789',
         floodRegions: ['Kuala Lumpur', 'Selangor'],
       );
 
@@ -229,6 +311,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _isLoggedIn = true;
         _userProfile = demoProfile;
         _addressController.text = demoProfile.address;
+        _phoneController.text = demoProfile.phoneNumber;
         for (int i = 0; i < demoProfile.floodRegions.length && i < 5; i++) {
           _regionControllers[i].text = demoProfile.floodRegions[i];
         }
@@ -247,15 +330,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _googleSignIn.signOut();
+      await _authService.signOut(context);
+
+      // Clear local data
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
 
       setState(() {
         _isLoggedIn = false;
-        _currentUser = null;
+        _firebaseUser = null;
         _userProfile = null;
         _addressController.clear();
+        _phoneController.clear();
         for (var controller in _regionControllers) {
           controller.clear();
         }
@@ -269,7 +355,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showAdditionalInfoForm() {
-    if (_currentUser != null) {
+    if (_firebaseUser != null) {
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -278,7 +364,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         enableDrag: false,
         builder:
             (context) => AdditionalInfoForm(
-              user: _currentUser!,
+              firebaseUser: _firebaseUser!,
               onSave: _saveUserProfile,
             ),
       );
@@ -296,6 +382,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _userProfile = profile;
         _addressController.text = profile.address;
+        _phoneController.text = profile.phoneNumber;
         for (int i = 0; i < profile.floodRegions.length && i < 5; i++) {
           _regionControllers[i].text = profile.floodRegions[i];
         }
@@ -468,6 +555,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         photoUrl: _userProfile!.photoUrl,
         phoneNumber: _userProfile!.phoneNumber,
         address: newAddress,
+        phoneNumber: _userProfile!.phoneNumber,
         floodRegions: _userProfile!.floodRegions,
       );
 
@@ -487,6 +575,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (error) {
       print('Error updating address: $error');
       _showErrorSnackBar('Failed to update address');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _editPhoneNumber() {
+    final controller = TextEditingController(text: _userProfile!.phoneNumber);
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Edit Phone Number'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              hintText: 'Enter your phone number',
+              border: OutlineInputBorder(),
+            ),
+            keyboardType: TextInputType.phone,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (controller.text.trim().isNotEmpty) {
+                  _updatePhoneNumber(controller.text.trim());
+                  Navigator.of(context).pop();
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _updatePhoneNumber(String newPhoneNumber) async {
+    setState(() => _isLoading = true);
+
+    try {
+      final updatedProfile = UserProfile(
+        id: _userProfile!.id,
+        email: _userProfile!.email,
+        displayName: _userProfile!.displayName,
+        photoUrl: _userProfile!.photoUrl,
+        address: _userProfile!.address,
+        phoneNumber: newPhoneNumber,
+        floodRegions: _userProfile!.floodRegions,
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userProfile', jsonEncode(updatedProfile.toJson()));
+
+      setState(() {
+        _userProfile = updatedProfile;
+        _phoneController.text = newPhoneNumber;
+      });
+
+      _showSuccessSnackBar('Phone number updated successfully!');
+    } catch (error) {
+      print('Error updating phone number: $error');
+      _showErrorSnackBar('Failed to update phone number');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -541,6 +696,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         photoUrl: _userProfile!.photoUrl,
         phoneNumber: _userProfile!.phoneNumber,
         address: _userProfile!.address,
+        phoneNumber: _userProfile!.phoneNumber,
         floodRegions: updatedRegions,
       );
 
@@ -578,6 +734,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         photoUrl: _userProfile!.photoUrl,
         phoneNumber: _userProfile!.phoneNumber,
         address: _userProfile!.address,
+        phoneNumber: _userProfile!.phoneNumber,
         floodRegions: updatedRegions,
       );
 
@@ -621,13 +778,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
         centerTitle: true,
         elevation: 0,
       ),
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _isLoggedIn && _userProfile != null
-              ? _buildProfileView()
-              : _buildLoginPrompt(),
+      body: _buildBody(),
     );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2254C5)),
+        ),
+      );
+    }
+
+    if (_isLoggedIn && _userProfile != null) {
+      return _buildProfileView();
+    }
+
+    return _buildLoginPrompt();
   }
 
   Widget _buildLoginPrompt() {
@@ -801,7 +969,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _userProfile!.address,
             Icons.location_on,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+
+          // Phone Number Section
+          _buildPhoneNumberSection(),
+          const SizedBox(height: 12),
 
           // Flood Warning Regions
           _buildFloodRegionsSection(),
@@ -856,7 +1028,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12.0, 4.0, 12.0, 12.0),
+        padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -890,6 +1062,114 @@ class _ProfileScreenState extends State<ProfileScreen> {
               value,
               textAlign: TextAlign.left,
               style: const TextStyle(fontSize: 16, color: Colors.black),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPhoneNumberSection() {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.phone, color: Color(0xFF2254C5)),
+                const SizedBox(width: 12),
+                const Text(
+                  'Phone Number',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => _editPhoneNumber(),
+                  icon: const Icon(
+                    Icons.edit,
+                    size: 20,
+                    color: Color(0xFF2254C5),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _userProfile!.phoneNumber.isNotEmpty
+                  ? _userProfile!.phoneNumber
+                  : 'No phone number provided',
+              textAlign: TextAlign.left,
+              style: TextStyle(
+                fontSize: 16,
+                color:
+                    _userProfile!.phoneNumber.isNotEmpty
+                        ? Colors.black
+                        : Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPhoneNumberSection() {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.phone, color: Color(0xFF2254C5)),
+                const SizedBox(width: 10),
+                const Text(
+                  'Phone Number',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => _editPhoneNumber(),
+                  icon: const Icon(
+                    Icons.edit,
+                    size: 20,
+                    color: Color(0xFF2254C5),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _userProfile!.phoneNumber.isNotEmpty
+                  ? _userProfile!.phoneNumber
+                  : 'No phone number provided',
+              textAlign: TextAlign.left,
+              style: TextStyle(
+                fontSize: 16,
+                color:
+                    _userProfile!.phoneNumber.isNotEmpty
+                        ? Colors.black
+                        : Colors.grey,
+              ),
             ),
           ],
         ),
@@ -979,12 +1259,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 class AdditionalInfoForm extends StatefulWidget {
-  final GoogleSignInAccount user;
+  final User firebaseUser;
   final Function(UserProfile) onSave;
 
   const AdditionalInfoForm({
     super.key,
-    required this.user,
+    required this.firebaseUser,
     required this.onSave,
   });
 
@@ -996,6 +1276,7 @@ class _AdditionalInfoFormState extends State<AdditionalInfoForm> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
+  final _phoneController = TextEditingController();
   final List<TextEditingController> _regionControllers = [
     TextEditingController(),
     TextEditingController(),
@@ -1009,6 +1290,7 @@ class _AdditionalInfoFormState extends State<AdditionalInfoForm> {
   void dispose() {
     _phoneController.dispose();
     _addressController.dispose();
+    _phoneController.dispose();
     for (var controller in _regionControllers) {
       controller.dispose();
     }
@@ -1042,12 +1324,12 @@ class _AdditionalInfoFormState extends State<AdditionalInfoForm> {
               .toList();
 
       final profile = UserProfile(
-        id: widget.user.id,
-        email: widget.user.email,
-        displayName: widget.user.displayName ?? 'User',
-        photoUrl: widget.user.photoUrl,
-        phoneNumber: _phoneController.text.trim(),
+        id: widget.firebaseUser.uid,
+        email: widget.firebaseUser.email ?? '',
+        displayName: widget.firebaseUser.displayName ?? 'User',
+        photoUrl: widget.firebaseUser.photoURL,
         address: _addressController.text.trim(),
+        phoneNumber: _phoneController.text.trim(),
         floodRegions: regions,
       );
 
@@ -1086,17 +1368,17 @@ class _AdditionalInfoFormState extends State<AdditionalInfoForm> {
                 CircleAvatar(
                   radius: 30,
                   backgroundImage:
-                      widget.user.photoUrl != null
-                          ? NetworkImage(widget.user.photoUrl!)
+                      widget.firebaseUser.photoURL != null
+                          ? NetworkImage(widget.firebaseUser.photoURL!)
                           : null,
                   child:
-                      widget.user.photoUrl == null
+                      widget.firebaseUser.photoURL == null
                           ? const Icon(Icons.person, size: 30)
                           : null,
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Welcome, ${widget.user.displayName ?? 'User'}!',
+                  'Welcome, ${widget.firebaseUser.displayName ?? 'User'}!',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 20,
@@ -1164,15 +1446,14 @@ class _AdditionalInfoFormState extends State<AdditionalInfoForm> {
                     TextFormField(
                       textAlign: TextAlign.center,
                       controller: _phoneController,
-                      keyboardType: TextInputType.phone,
                       decoration: InputDecoration(
-                        hintText:
-                            'Enter your phone number (e.g., +60 12-345 6789)',
+                        hintText: 'Enter your phone number',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
                         prefixIcon: const Icon(Icons.phone),
                       ),
+                      keyboardType: TextInputType.phone,
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
                           return 'Please enter your phone number';
@@ -1293,6 +1574,7 @@ class UserProfile {
   final String? photoUrl;
   final String? phoneNumber;
   final String address;
+  final String phoneNumber;
   final List<String> floodRegions;
 
   UserProfile({
@@ -1302,6 +1584,7 @@ class UserProfile {
     this.photoUrl,
     this.phoneNumber,
     required this.address,
+    required this.phoneNumber,
     required this.floodRegions,
   });
 
@@ -1313,6 +1596,7 @@ class UserProfile {
       'photoUrl': photoUrl,
       'phoneNumber': phoneNumber,
       'address': address,
+      'phoneNumber': phoneNumber,
       'floodRegions': floodRegions,
     };
   }
@@ -1323,12 +1607,9 @@ class UserProfile {
       email: json['email'] ?? '',
       displayName: json['displayName'] ?? 'User',
       photoUrl: json['photoUrl'],
-      phoneNumber: json['phoneNumber'],
-      address: json['address'] ?? '',
-      floodRegions:
-          json['floodRegions'] != null
-              ? List<String>.from(json['floodRegions'])
-              : <String>[],
+      address: json['address'],
+      phoneNumber: json['phoneNumber'] ?? '', // Handle backward compatibility
+      floodRegions: List<String>.from(json['floodRegions']),
     );
   }
 
