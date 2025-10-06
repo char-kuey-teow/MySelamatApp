@@ -15,6 +15,11 @@
         android:label="my_selamat_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        
+        <!-- Google Maps API Key -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyAupowXVdjw9VQESNxsqBeWskKjXvfeTZE"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

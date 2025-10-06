@@ -48,6 +48,7 @@ dependencies:
   firebase_core: ^3.6.0
   firebase_auth: ^5.3.1
   cloud_firestore: ^5.4.3
+  image: ^4.1.7
   crypto: ^3.0.3
   aws_s3_api: ^2.0.0
 
@@ -81,6 +82,7 @@ flutter:
   assets:
     - assets/fonts/ 
     - assets/mocks/
+    - assets/icons/
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 
