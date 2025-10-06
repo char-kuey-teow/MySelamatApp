@@ -395,7 +395,7 @@ class MainNavigator extends StatefulWidget {
 }
 
 class _MainNavigatorState extends State<MainNavigator> {
-  int _selectedIndex = 0;
+  int _selectedIndex = 4; // Start with Profile page (index 4)
 
   static const primaryColor = Color(0xFF2254C5);
 
@@ -434,10 +434,7 @@ class _MainNavigatorState extends State<MainNavigator> {
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
         BottomNavigationBarItem(icon: Icon(Icons.sos_outlined), label: 'SOS'),
         BottomNavigationBarItem(icon: Icon(Icons.home_work), label: 'Shelter'),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.chat),
-          label: 'Chat',
-        ),
+        BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
       onTap: _onItemTapped,

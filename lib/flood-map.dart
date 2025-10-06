@@ -12,7 +12,7 @@ const String API_BASE = "http://localhost:3001"; // For real backend API access
 const String MOCK_PATH =
     "http://localhost:8080/mocks"; // Assuming mock files are served
 const LatLng DEFAULT_CENTER = LatLng(6.129, 102.243); // Kota Bharu
-const bool USE_FAKE_USER_LOC = true;
+const bool USE_FAKE_USER_LOC = false;
 const LatLng FAKE_USER_LOC = LatLng(6.191, 102.273);
 
 // API key is now loaded from config.dart (gitignored file)
