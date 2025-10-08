@@ -14,7 +14,8 @@ const String API_BASE = "http://localhost:3001"; // For real backend API access
 const String MOCK_PATH =
     "http://localhost:8080/mocks"; // Assuming mock files are served
 const String CLOUDFRONT_BASE = "https://d2m06s680fwyuz.cloudfront.net";
-const String LATEST_FILE_API = "https://w1q8jucej0.execute-api.us-east-1.amazonaws.com/testing/latest-file";
+// Updated to use new API endpoint
+const String FLOOD_LOCATIONS_API = "https://sbb646ua7a.execute-api.us-east-1.amazonaws.com/testing/floodLocations";
 const String SAFE_ZONES_LOCATIONS_API = "https://w1q8jucej0.execute-api.us-east-1.amazonaws.com/testing/safe-zones-locations";
 const LatLng DEFAULT_CENTER = LatLng(6.129, 102.243); // Kota Bharu
 const bool USE_FAKE_USER_LOC = false;
@@ -95,12 +96,28 @@ class FloodRiskInfo {
   final String level;
   final List<String> reasons;
   final List<List<LatLng>> polygons;
+  final String name;
+  final String state;
+  final String district;
+  final bool isFlood;
+  final int reportCount;
+  final double? latestTimestamp;
+  final Map<String, double>? coordinates;
+  final List<Map<String, double>>? decagonCoordinates;
 
   FloodRiskInfo({
     required this.districtId,
     required this.level,
     required this.reasons,
     required this.polygons,
+    required this.name,
+    required this.state,
+    required this.district,
+    required this.isFlood,
+    required this.reportCount,
+    this.latestTimestamp,
+    this.coordinates,
+    this.decagonCoordinates,
   });
 }
 
@@ -118,14 +135,13 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
   GoogleMapController? _mapController;
   LatLng? _userLocation;
   Set<Polygon> _polygons = {};
-  Set<Marker> _markers = {};
-  Set<Polyline> _polylines = {};
+  final Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
   List<FloodRiskInfo> _floodRiskInfoList = [];
   BitmapDescriptor? _userLocationIcon;
 
   // UI State for Advice/ETA Panels
   String _currentLevel = "GREEN";
-  String _adviceTitle = "Risk Summary";
   String _adviceMessage = "🟢 Low risk. Stay alert for updates.";
   String _etaSummary = "Tap a safe zone and press 'Safe Route'.";
   String _lastUpdated = "Loading...";
@@ -134,7 +150,7 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
   SafeZone? _selectedSafeZone;
   
   // Scroll controller for risk panel
-  ScrollController _riskPanelScrollController = ScrollController();
+  final ScrollController _riskPanelScrollController = ScrollController();
   double _scrollPosition = 0.0;
   
   // Dynamic marker filtering
@@ -891,37 +907,31 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
     }
   }
 
-  // Get latest flood data from Lambda API
+  // Get latest flood data from new API
   Future<dynamic> _getLatestFloodData() async {
     try {
-      final response = await http.get(Uri.parse(LATEST_FILE_API));
+      final response = await http.get(Uri.parse(FLOOD_LOCATIONS_API));
       
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
         if (data['success'] == true) {
-          final transformedData = data['transformed_data'];
-          debugPrint('✅ Flood data loaded: ${transformedData.length} districts');
+          final locationsData = data['data'];
+          debugPrint('✅ Flood data loaded: ${locationsData.length} locations');
           
           // 🔍 INVESTIGATION: Check what locations we're getting
           debugPrint('🔍 INVESTIGATION - Flood API Response Analysis:');
-          for (int i = 0; i < transformedData.length && i < 3; i++) {
-            final district = transformedData[i];
-            debugPrint('📍 District ${i + 1}:');
-            debugPrint('   ID: ${district['districtId']}');
-            debugPrint('   Level: ${district['level']}');
-            debugPrint('   Center: ${district['center']['lat']}, ${district['center']['lng']}');
-            debugPrint('   Polygon points: ${district['polygon'][0].length}');
-            
-            // Show first few polygon coordinates
-            final polygon = district['polygon'][0];
-            if (polygon.isNotEmpty) {
-              debugPrint('   First polygon point: ${polygon[0][1]}, ${polygon[0][0]} (lat, lng)');
-              debugPrint('   Last polygon point: ${polygon.last[1]}, ${polygon.last[0]} (lat, lng)');
-            }
+          for (int i = 0; i < locationsData.length && i < 3; i++) {
+            final location = locationsData[i];
+            debugPrint('📍 Location ${i + 1}:');
+            debugPrint('   ID: ${location['id']}');
+            debugPrint('   Name: ${location['name']}');
+            debugPrint('   Severity: ${location['severity']}');
+            debugPrint('   Coordinates: ${location['coordinates']}');
+            debugPrint('   Decagon points: ${location['decagonCoordinates']?.length ?? 0}');
           }
           
-          return transformedData;
+          return locationsData;
         }
       }
       
@@ -938,64 +948,73 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
     if (data is List) {
       debugPrint('🔍 INVESTIGATION - Parsing Flood Data:');
       for (int i = 0; i < data.length; i++) {
-        var d = data[i];
-        if (d is Map<String, dynamic>) {
-          // Handle polygon data from Lambda function (format: [[[lng, lat], [lng, lat], ...]])
-          List<LatLng> polygons = [];
+        var location = data[i];
+        if (location is Map<String, dynamic>) {
+          // Handle decagon coordinates from new API
+          List<LatLng> decagonPolygon = [];
 
           try {
-            if (d['polygon'] != null && d['polygon'] is List) {
-              final polygonData = d['polygon'] as List<dynamic>;
-              if (polygonData.isNotEmpty) {
-                // Lambda function returns nested array: [[[lng, lat], [lng, lat], ...]]
-                final firstPolygon = polygonData[0] as List<dynamic>;
-                if (firstPolygon.isNotEmpty) {
-                  // 🔍 INVESTIGATION: Debug polygon coordinates
-                  debugPrint('🔍 District ${i + 1} - Raw polygon data:');
-                  debugPrint('   District ID: ${d['districtId']}');
-                  debugPrint('   Raw first point: ${firstPolygon.first}');
-                  debugPrint('   Raw last point: ${firstPolygon.last}');
-                  
-                  polygons = firstPolygon
-                      .map((point) {
-                        if (point is List && point.length >= 2) {
-                          // Lambda returns [lng, lat] format, so we need to swap them
-                          final lat = (point[1] as num).toDouble();
-                          final lng = (point[0] as num).toDouble();
-                          return LatLng(lat, lng);
-                        }
-                        debugPrint('⚠️ Invalid point format: $point');
-                        return null;
-                      })
-                      .where((point) => point != null)
-                      .cast<LatLng>()
-                      .toList();
-                  
-                  // 🔍 INVESTIGATION: Debug parsed polygon coordinates
-                  if (polygons.isNotEmpty) {
-                    debugPrint('   Parsed first point: ${polygons.first.latitude}, ${polygons.first.longitude}');
-                    debugPrint('   Parsed last point: ${polygons.last.latitude}, ${polygons.last.longitude}');
-                    debugPrint('   Polygon region: ${_getRegionFromCoordinates(polygons.first)}');
-                  }
+            if (location['decagonCoordinates'] != null && location['decagonCoordinates'] is List) {
+              final decagonData = location['decagonCoordinates'] as List<dynamic>;
+              if (decagonData.isNotEmpty) {
+                // New API returns decagon coordinates as [{"latitude": x, "longitude": y}, ...]
+                decagonPolygon = decagonData
+                    .map((point) {
+                      if (point is Map<String, dynamic>) {
+                        final lat = (point['latitude'] as num).toDouble();
+                        final lng = (point['longitude'] as num).toDouble();
+                        return LatLng(lat, lng);
+                      }
+                      debugPrint('⚠️ Invalid decagon point format: $point');
+                      return null;
+                    })
+                    .where((point) => point != null)
+                    .cast<LatLng>()
+                    .toList();
+                
+                // 🔍 INVESTIGATION: Debug parsed decagon coordinates
+                if (decagonPolygon.isNotEmpty) {
+                  debugPrint('🔍 Location ${i + 1} - Decagon data:');
+                  debugPrint('   Location ID: ${location['id']}');
+                  debugPrint('   Decagon points: ${decagonPolygon.length}');
+                  debugPrint('   First point: ${decagonPolygon.first.latitude}, ${decagonPolygon.first.longitude}');
+                  debugPrint('   Last point: ${decagonPolygon.last.latitude}, ${decagonPolygon.last.longitude}');
                 }
               }
             }
           } catch (e) {
-            debugPrint('❌ Error parsing polygon for district ${d['districtId']}: $e');
+            debugPrint('❌ Error parsing decagon for location ${location['id']}: $e');
           }
 
-          debugPrint('🔍 Parsing district: ${d['districtId']}');
-          debugPrint('   Polygon points: ${polygons.length}');
-          if (polygons.isNotEmpty) {
-            debugPrint('   First point: ${polygons[0].latitude.toStringAsFixed(4)}, ${polygons[0].longitude.toStringAsFixed(4)}');
+          debugPrint('🔍 Parsing location: ${location['id']}');
+          debugPrint('   Decagon points: ${decagonPolygon.length}');
+          if (decagonPolygon.isNotEmpty) {
+            debugPrint('   First point: ${decagonPolygon[0].latitude.toStringAsFixed(4)}, ${decagonPolygon[0].longitude.toStringAsFixed(4)}');
           }
 
+          // Convert severity to uppercase for consistency
+          final severity = (location['severity'] as String).toUpperCase();
+          
           floodRiskInfoList.add(
             FloodRiskInfo(
-              districtId: d['districtId'] as String,
-              level: d['level'] as String,
-              reasons: List<String>.from(d['reasons'] as List<dynamic>),
-              polygons: [polygons],
+              districtId: location['id'] as String,
+              level: severity,
+              reasons: [location['isFlood'] == true ? 'Flood detected' : 'No flood detected'],
+              polygons: [decagonPolygon],
+              name: location['name'] as String,
+              state: location['state'] as String,
+              district: location['district'] as String,
+              isFlood: location['isFlood'] as bool,
+              reportCount: location['reportCount'] as int,
+              latestTimestamp: (location['latestTimestamp'] as num?)?.toDouble(),
+              coordinates: location['coordinates'] != null 
+                  ? Map<String, double>.from(location['coordinates'])
+                  : null,
+              decagonCoordinates: location['decagonCoordinates'] != null
+                  ? (location['decagonCoordinates'] as List)
+                      .map((coord) => Map<String, double>.from(coord))
+                      .toList()
+                  : null,
             ),
           );
         }
@@ -1695,14 +1714,14 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
   // --- 10. HELPERS (from map.js) ---
 
   int _severity(String l) {
-    return l == 'RED'
-        ? 4
-        : l == 'ORANGE'
+    return l == 'SEVERE'
+        ? 4  // Highest severity
+        : l == 'CRITICAL'
         ? 3
-        : l == 'YELLOW'
+        : l == 'MODERATE'
         ? 2
-        : l == 'GREEN'
-        ? 1
+        : l == 'MINOR' || l == 'GREEN'
+        ? 1  // Lowest severity
         : 0;
   }
 
@@ -1713,46 +1732,44 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
   }
 
   Color _colorForLevel(String l) {
-    return l == 'RED'
-        ? const Color(0xffd32f2f)
-        : l == 'ORANGE'
-        ? const Color(0xfff57c00)
-        : l == 'YELLOW'
-        ? const Color(0xfffbc02d)
-        : l == 'GREEN'
-        ? const Color(0xff43a047)
-        : const Color(0xff43a047);
+    return l == 'SEVERE'
+        ? const Color(0xffd32f2f)  // RED for SEVERE
+        : l == 'CRITICAL'
+        ? const Color(0xfff57c00)  // ORANGE for CRITICAL
+        : l == 'MODERATE'
+        ? const Color(0xfffbc02d)  // YELLOW for MODERATE
+        : l == 'MINOR' || l == 'GREEN'
+        ? const Color(0xff43a047)  // GREEN for MINOR/GREEN
+        : const Color(0xff43a047); // Default to GREEN
   }
 
   String _adviceForLevel(String l) {
-    if (l == 'RED') {
+    if (l == 'SEVERE') {
       return "🔴 Severe risk. Evacuate if instructed. Avoid rivers/underpasses.";
     }
-    if (l == 'ORANGE') {
-      return "🟠 High risk in 24h. Move valuables. Plan evacuation.";
+    if (l == 'CRITICAL') {
+      return "🟠 Critical risk. Immediate evacuation required. Move to higher ground.";
     }
-    if (l == 'YELLOW') {
+    if (l == 'MODERATE') {
       return "🟡 Heavy rain possible. Prepare go-bag. Avoid low areas.";
     }
-    if (l == 'GREEN') {
+    if (l == 'MINOR' || l == 'GREEN') {
       return "🟢 Safe area. No immediate flood risk detected.";
     }
     return "🟢 Low risk. Stay alert for updates.";
   }
 
-  String _badgeForLevel(String level) {
-    final l = level.toUpperCase();
-    return l;
-  }
-
   String _getSeverityText(String level) {
     switch (level.toUpperCase()) {
+      case 'MINOR':
       case 'GREEN':
         return 'Minor';
+      case 'MODERATE':
       case 'YELLOW':
         return 'Moderate';
-      case 'ORANGE':
+      case 'SEVERE':
         return 'Severe';
+      case 'CRITICAL':
       case 'RED':
         return 'Critical';
       default:
@@ -1780,7 +1797,6 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
 
     setState(() {
       _currentLevel = level;
-      _adviceTitle = title; // Just use the title without adding the level
       _adviceMessage = '$msg\n${reasons.join(", ")}\n$details';
     });
   }
@@ -2036,10 +2052,10 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildLegendItem('Minor', _colorForLevel('GREEN')),
-          _buildLegendItem('Moderate', _colorForLevel('YELLOW')),
-          _buildLegendItem('Severe', _colorForLevel('ORANGE')),
-          _buildLegendItem('Critical', _colorForLevel('RED')),
+          _buildLegendItem('Minor', _colorForLevel('MINOR')),
+          _buildLegendItem('Moderate', _colorForLevel('MODERATE')),
+          _buildLegendItem('Severe', _colorForLevel('SEVERE')),
+          _buildLegendItem('Critical', _colorForLevel('CRITICAL')),
         ],
       ),
     );
