@@ -20,6 +20,7 @@ const String SAFE_ZONES_LOCATIONS_API = "https://w1q8jucej0.execute-api.us-east-
 const LatLng DEFAULT_CENTER = LatLng(6.129, 102.243); // Kota Bharu
 const bool USE_FAKE_USER_LOC = false;
 
+
 // API key is now loaded from config.dart (gitignored file)
 const String GOOGLE_API_KEY = Config.googleApiKey;
 const String ROUTES_BASE = "https://routes.googleapis.com";

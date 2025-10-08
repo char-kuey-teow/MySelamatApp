@@ -53,7 +53,7 @@ class MainNavigator extends StatefulWidget {
 }
 
 class _MainNavigatorState extends State<MainNavigator> {
-  int _selectedIndex = 0;
+  int _selectedIndex = 0; // Start with Home page (index 0)
 
   static const primaryColor = Color(0xFF2254C5);
 

@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -6,10 +9,19 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+
 android {
     namespace = "com.example.my_selamat_app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "27.0.12077973"
+
+    val ndkDir = File(android.sdkDirectory, "ndk")
+    val ndkVersions = ndkDir.listFiles()?.map { it.name }?.sortedDescending()
+    val latestNdk = ndkVersions?.firstOrNull()
+
+    ndkVersion = latestNdk ?: "29.0.14033849"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -30,14 +42,39 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
+    signingConfigs {
+        // Debug uses the default debug key from Android Studio
+        getByName("debug")
 
-    buildTypes {
-        release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+        // Release uses your custom key.properties (if provided)
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file("${keystoreProperties["storeFile"]}")
+                storePassword = keystoreProperties["storePassword"] as String
+            }
         }
     }
+    buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+        getByName("release") {
+            signingConfig = if (signingConfigs.findByName("release") != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug") // fallback to debug if no key.properties
+            }
+            isMinifyEnabled = true
+            isShrinkResources = true  // optional, but only valid if isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
 }
 
 flutter {

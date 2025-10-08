@@ -1,0 +1,42 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Parameters": {
+    "authRoleName": {
+      "Type": "String"
+    },
+    "unauthRoleName": {
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "LexPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "LexV2Policy",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "lex:RecognizeText",
+                "lex:RecognizeUtterance",
+                "lex:PostText",
+                "lex:PostContent"
+              ],
+              "Resource": "arn:aws:lex:us-east-1:*:bot/BU1KHQTLUU"
+            }
+          ]
+        },
+        "Roles": [
+          {
+            "Ref": "authRoleName"
+          },
+          {
+            "Ref": "unauthRoleName"
+          }
+        ]
+      }
+    }
+  }
+}
