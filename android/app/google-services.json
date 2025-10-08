@@ -1,36 +1,26 @@
 {
   "project_info": {
-    "project_number": "58545088007",
-    "project_id": "myselamat-eca8c",
-    "storage_bucket": "myselamat-eca8c.firebasestorage.app"
+    "project_number": "614685176063",
+    "project_id": "ferrous-osprey-472705-r2",
+    "storage_bucket": "ferrous-osprey-472705-r2.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:58545088007:android:e1c672fd6937da3c8eeca2",
+        "mobilesdk_app_id": "1:614685176063:android:e4766b647995b2db769cca",
         "android_client_info": {
           "package_name": "com.example.my_selamat_app"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "58545088007-hrm0q1fi59l5tdf1gqnvog2cal6qmdmf.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBW2zfWM-ln9AR522j6Z4fxyniiX70KwF0"
+          "current_key": "AIzaSyBVUeB7sPW2GTRY7LwB-J-8QzzC3mbrEX4"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "58545088007-hrm0q1fi59l5tdf1gqnvog2cal6qmdmf.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }
