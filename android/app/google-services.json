@@ -12,7 +12,20 @@
           "package_name": "com.example.my_selamat_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "614685176063-umg4i59revg2lauipb2eoq5v7a34n4rr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.my_selamat_app",
+            "certificate_hash": "338f8cc52e6c28d879507b960c367b50a4c5dc71"
+          }
+        },
+        {
+          "client_id": "614685176063-hi1mcgc04ftukrkd52lbo4r2jrba8dmg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBVUeB7sPW2GTRY7LwB-J-8QzzC3mbrEX4"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "614685176063-hi1mcgc04ftukrkd52lbo4r2jrba8dmg.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
