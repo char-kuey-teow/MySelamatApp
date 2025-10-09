@@ -457,7 +457,14 @@ class _MainNavigatorState extends State<MainNavigator> {
 // --- Example `main` function to run the app ---
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    print('Firebase initialization error: $e');
+    // Continue without Firebase for now
+  }
+
   runApp(const MyApp());
 }
 
