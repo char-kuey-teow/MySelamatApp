@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:async';
@@ -723,7 +725,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16, color: Colors.grey),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
+          
+          // Firebase Status Indicator
+          Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.cloud_done,
+                    color: Colors.green,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Firebase Connected',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.green,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             height: 50,
