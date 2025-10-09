@@ -201,6 +201,27 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
     _pulseController.stop();
   }
 
+  void _cancelSos() {
+    setState(() {
+      _showCategories = false;
+      _isSosActive = false;
+      _currentStatus = '';
+      _isErrorStatus = false;
+
+      // Reset all SOS-related data
+      _sentCategory = null;
+      _sentLocation = null;
+      _sentTimestamp = null;
+      _locationAddress = null;
+      _locationDetails = null;
+    });
+
+    // Cancel any ongoing timers
+    _locationUpdateTimer?.cancel();
+
+    print('SOS cancelled - returning to initial state');
+  }
+
   void _showStatusMessage(
     BuildContext context,
     String message, {
@@ -914,7 +935,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
       // Upload SOS data to S3 first
       print('Uploading SOS data to S3...');
       final s3UploadSuccess = await S3Service.uploadSOSData(sosData);
-      
+
       if (!s3UploadSuccess) {
         _showStatusMessage(
           context,
@@ -1003,7 +1024,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
           // Upload location update to S3 first
           print('Uploading location update to S3...');
           final s3UploadSuccess = await S3Service.uploadReport(locationUpdate);
-          
+
           if (!s3UploadSuccess) {
             print('Warning: Location update could not be backed up to S3');
           } else {
@@ -1264,6 +1285,9 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
               const SizedBox(height: 8.0),
               // Push to Talk button with different styling
               _buildPushToTalkButton(),
+              const SizedBox(height: 8.0),
+              // Cancel button - appears after 3-second hold
+              _buildCancelButton(),
             ],
           ],
         ),
@@ -1373,6 +1397,26 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
             color: Colors.orange,
             width: 2,
           ), // Different border
+        ),
+        elevation: 0,
+      ),
+    );
+  }
+
+  Widget _buildCancelButton() {
+    return ElevatedButton.icon(
+      icon: const Icon(Icons.cancel_outlined, color: Colors.white, size: 18),
+      label: const Text(
+        'Cancel SOS',
+        style: TextStyle(fontSize: 12, color: Colors.white),
+      ),
+      onPressed: _cancelSos,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.red.withOpacity(0.2),
+        minimumSize: const Size(double.infinity, 40),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: Colors.red, width: 2),
         ),
         elevation: 0,
       ),

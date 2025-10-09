@@ -410,201 +410,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // Debug method to test SharedPreferences persistence
-  Future<void> _testPersistence() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userData = prefs.getString('userProfile');
-
-      print('=== PERSISTENCE TEST ===');
-      print('Raw SharedPreferences data: $userData');
-
-      if (userData != null) {
-        final userMap = jsonDecode(userData);
-        final testProfile = UserProfile.fromJson(userMap);
-        print('Parsed profile data:');
-        print('- ID: ${testProfile.id}');
-        print('- Name: ${testProfile.displayName}');
-        print('- Email: ${testProfile.email}');
-        print('- Phone: ${testProfile.phoneNumber}');
-        print('- Address: ${testProfile.address}');
-        print('- Regions: ${testProfile.floodRegions}');
-      } else {
-        print('No data found in SharedPreferences');
-      }
-      print('========================');
-    } catch (e) {
-      print('Error testing persistence: $e');
-    }
-  }
-
-  // Firebase connection test method
-  Future<void> _testFirebaseConnection() async {
-    setState(() => _isLoading = true);
-    
-    try {
-      print('=== FIREBASE CONNECTION TEST ===');
-      
-      // Test 1: Firebase Auth instance
-      print('1. Testing Firebase Auth instance...');
-      final auth = FirebaseAuth.instance;
-      print('   ✓ Firebase Auth instance created');
-      
-      // Test 2: Current user
-      print('2. Testing current user...');
-      final currentUser = auth.currentUser;
-      if (currentUser != null) {
-        print('   ✓ Current user: ${currentUser.email}');
-        print('   ✓ User ID: ${currentUser.uid}');
-        print('   ✓ Display name: ${currentUser.displayName}');
-        print('   ✓ Email verified: ${currentUser.emailVerified}');
-        print('   ✓ Creation time: ${currentUser.metadata.creationTime}');
-        print('   ✓ Last sign in: ${currentUser.metadata.lastSignInTime}');
-      } else {
-        print('   ⚠ No current user (not signed in)');
-      }
-      
-      // Test 3: Auth state changes stream
-      print('3. Testing auth state changes stream...');
-      auth.authStateChanges();
-      print('   ✓ Auth state changes stream available');
-      
-      // Test 4: Google Sign-In configuration
-      print('4. Testing Google Sign-In configuration...');
-      try {
-        final googleSignIn = GoogleSignIn();
-        final isSignedIn = await googleSignIn.isSignedIn();
-        print('   ✓ Google Sign-In configured');
-        print('   ✓ Google Sign-In status: ${isSignedIn ? "Signed in" : "Not signed in"}');
-      } catch (e) {
-        print('   ⚠ Google Sign-In error: $e');
-      }
-      
-      // Test 5: Firebase project info
-      print('5. Testing Firebase project configuration...');
-      try {
-        final app = Firebase.app();
-        print('   ✓ Firebase app initialized');
-        print('   ✓ App name: ${app.name}');
-        print('   ✓ App options: ${app.options.projectId}');
-      } catch (e) {
-        print('   ⚠ Firebase app error: $e');
-      }
-      
-      // Test 6: Network connectivity test
-      print('6. Testing network connectivity...');
-      try {
-        // Simple network test by checking if we can reach Firebase
-        await auth.currentUser?.reload();
-        print('   ✓ Network connectivity OK');
-      } catch (e) {
-        print('   ⚠ Network connectivity issue: $e');
-      }
-      
-      print('=== FIREBASE TEST COMPLETED ===');
-      
-      // Show results in UI
-      _showFirebaseTestResults();
-      
-    } catch (e) {
-      print('=== FIREBASE TEST FAILED ===');
-      print('Error: $e');
-      if (mounted) {
-        _showErrorSnackBar('Firebase test failed: $e');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  void _showFirebaseTestResults() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Firebase Connection Test'),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Firebase Status:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                _buildStatusItem('Firebase Auth', true),
-                _buildStatusItem('Current User', _firebaseUser != null),
-                _buildStatusItem('Google Sign-In', true), // We know it's configured
-                _buildStatusItem('App Initialization', true), // We know it's initialized
-                const SizedBox(height: 16),
-                const Text(
-                  'Current User Details:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                if (_firebaseUser != null) ...[
-                  Text('Email: ${_firebaseUser!.email ?? "N/A"}'),
-                  Text('UID: ${_firebaseUser!.uid}'),
-                  Text('Display Name: ${_firebaseUser!.displayName ?? "N/A"}'),
-                  Text('Email Verified: ${_firebaseUser!.emailVerified}'),
-                ] else ...[
-                  const Text('No user signed in'),
-                ],
-                const SizedBox(height: 16),
-                const Text(
-                  'Recommendations:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                if (_firebaseUser == null) ...[
-                  const Text('• Try signing in with Google'),
-                  const Text('• Check internet connection'),
-                ] else ...[
-                  const Text('• Firebase is working correctly'),
-                  const Text('• You can use all Firebase features'),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
-            ),
-            if (_firebaseUser == null)
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _signInWithGoogle();
-                },
-                child: const Text('Sign In'),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildStatusItem(String label, bool isWorking) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Icon(
-            isWorking ? Icons.check_circle : Icons.error,
-            color: isWorking ? Colors.green : Colors.red,
-            size: 16,
-          ),
-          const SizedBox(width: 8),
-          Text(label),
-        ],
-      ),
-    );
-  }
-
   void _editPhoneNumber() {
     final controller = TextEditingController(
       text: _userProfile!.phoneNumberOrEmpty,
@@ -1018,77 +823,89 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Profile Header
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundImage:
-                        _userProfile!.photoUrl != null
-                            ? NetworkImage(_userProfile!.photoUrl!)
-                            : null,
-                    child:
-                        _userProfile!.photoUrl == null
-                            ? const Icon(Icons.person, size: 50)
-                            : null,
+          // Profile Header - Made Smaller and Centered
+          Center( // <--- 1. Center the entire square horizontally in the main column
+            child: FractionallySizedBox( // <--- 2. Constrain the size (e.g., 70% of screen width)
+              widthFactor: 0.6, // 70% of the parent's width
+              child: AspectRatio(
+                aspectRatio: 1.0, // Ensures it remains a square
+                child: Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _userProfile!.displayName,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0), // Reduced padding for a smaller square
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center, // <--- 3. Center contents vertically
+                      crossAxisAlignment: CrossAxisAlignment.center, // Already centered horizontally
+                      children: [
+                        CircleAvatar(
+                          radius: 40, // Reduced radius to fit a smaller square
+                          backgroundImage:
+                              _userProfile!.photoUrl != null
+                                  ? NetworkImage(_userProfile!.photoUrl!)
+                                  : null,
+                          child:
+                              _userProfile!.photoUrl == null
+                                  ? const Icon(Icons.person, size: 40) // Reduced icon size
+                                  : null,
+                        ),
+                        const SizedBox(height: 8), // Reduced spacing
+                        Text(
+                          _userProfile!.displayName,
+                          style: const TextStyle(
+                            fontSize: 20, // Reduced font size
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          _userProfile!.email,
+                          style: const TextStyle(fontSize: 14, color: Colors.grey), // Reduced font size
+                        ),
+                        const SizedBox(height: 1),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _userProfile!.hasPhoneNumber
+                                  ? _userProfile!.phoneNumber
+                                  : 'No phone number',
+                              style: TextStyle(
+                                fontSize: 14, // Reduced font size
+                                color:
+                                    _userProfile!.hasPhoneNumber
+                                        ? Colors.grey
+                                        : Colors.grey.shade400,
+                                fontStyle:
+                                    _userProfile!.hasPhoneNumber
+                                        ? FontStyle.normal
+                                        : FontStyle.italic,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            GestureDetector(
+                              onTap: _editPhoneNumber,
+                              child: Icon(
+                                Icons.edit,
+                                size: 12, // Reduced icon size
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _userProfile!.email,
-                    style: const TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _userProfile!.hasPhoneNumber
-                            ? _userProfile!.phoneNumber
-                            : 'No phone number',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color:
-                              _userProfile!.hasPhoneNumber
-                                  ? Colors.grey
-                                  : Colors.grey.shade400,
-                          fontStyle:
-                              _userProfile!.hasPhoneNumber
-                                  ? FontStyle.normal
-                                  : FontStyle.italic,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: _editPhoneNumber,
-                        child: Icon(
-                          Icons.edit,
-                          size: 16,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 24),
+
+          
+          const SizedBox(height: 20),
 
           // Address Section
           _buildInfoSection(
@@ -1098,57 +915,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Phone Number Section
-          _buildPhoneNumberSection(),
-          const SizedBox(height: 12),
-
           // Flood Warning Regions
           _buildFloodRegionsSection(),
           const SizedBox(height: 24),
-
-          // Firebase Test Button
-          SizedBox(
-            width: double.infinity,
-            height: 36,
-            child: OutlinedButton.icon(
-              onPressed: _testFirebaseConnection,
-              icon: const Icon(Icons.cloud_done, size: 16),
-              label: const Text(
-                'Test Firebase Connection',
-                style: TextStyle(fontSize: 12),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.blue,
-                side: const BorderSide(color: Colors.blue),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          
-          // Debug Test Button (temporary)
-          SizedBox(
-            width: double.infinity,
-            height: 36,
-            child: OutlinedButton.icon(
-              onPressed: _testPersistence,
-              icon: const Icon(Icons.bug_report, size: 16),
-              label: const Text(
-                'Test Persistence (Debug)',
-                style: TextStyle(fontSize: 12),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.orange,
-                side: const BorderSide(color: Colors.orange),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
 
           // Sign Out Button
           SizedBox(
@@ -1211,60 +980,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               value,
               textAlign: TextAlign.left,
               style: const TextStyle(fontSize: 16, color: Colors.black),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPhoneNumberSection() {
-    return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.phone, color: Color(0xFF2254C5)),
-                const SizedBox(width: 12),
-                const Text(
-                  'Phone Number',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => _editPhoneNumber(),
-                  icon: const Icon(
-                    Icons.edit,
-                    size: 20,
-                    color: Color(0xFF2254C5),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _userProfile!.phoneNumber.isNotEmpty
-                  ? _userProfile!.phoneNumber
-                  : 'No phone number provided',
-              textAlign: TextAlign.left,
-              style: TextStyle(
-                fontSize: 16,
-                color:
-                    _userProfile!.phoneNumber.isNotEmpty
-                        ? Colors.black
-                        : Colors.grey,
-              ),
             ),
           ],
         ),

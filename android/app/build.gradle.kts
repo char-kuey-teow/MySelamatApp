@@ -1,6 +1,13 @@
 import java.util.Properties
 import java.io.FileInputStream
 
+// Load local properties for API keys
+val localPropertiesFile = rootProject.file("local.properties")
+val localProperties = Properties()
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
+}
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -16,6 +23,10 @@ keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 android {
     namespace = "com.example.my_selamat_app"
     compileSdk = flutter.compileSdkVersion
+    
+    buildFeatures {
+        buildConfig = true
+    }
 
     val ndkDir = File(android.sdkDirectory, "ndk")
     val ndkVersions = ndkDir.listFiles()?.map { it.name }?.sortedDescending()
@@ -41,6 +52,12 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        
+        // Set Google Maps API key from local.properties
+        buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"${localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")}\"")
+        
+        // Set manifest placeholders for API keys
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")
     }
     signingConfigs {
         // Debug uses the default debug key from Android Studio
