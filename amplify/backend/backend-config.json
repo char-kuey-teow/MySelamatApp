@@ -1,0 +1,9 @@
+{
+  "interactions": {
+    "botSelamat": {
+      "service": "LexV2",
+      "providerPlugin": "awscloudformation",
+      "build": true
+    }
+  }
+}

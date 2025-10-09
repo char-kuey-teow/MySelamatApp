@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'profile.dart';
 import 'config.dart';
+import 'services/s3_service.dart';
 
 // --- Placeholder for the Home Screen ---
 // In a real app, this would be your FloodSafeScreen from the earlier file.
@@ -910,6 +911,20 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
         sosData['userPhone'] = _currentUserProfile!.phoneNumber!;
       }
 
+      // Upload SOS data to S3 first
+      print('Uploading SOS data to S3...');
+      final s3UploadSuccess = await S3Service.uploadSOSData(sosData);
+      
+      if (!s3UploadSuccess) {
+        _showStatusMessage(
+          context,
+          'Warning: SOS data could not be backed up to S3, but SOS will still be sent.',
+          isError: false,
+        );
+      } else {
+        print('✅ SOS data successfully uploaded to S3');
+      }
+
       // Send SOS data based on configuration
       if (Config.useDemoMode) {
         // Simulate successful SOS sending for demo purposes
@@ -984,6 +999,16 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
             'longitude': position.longitude,
             'timestamp': DateTime.now().toIso8601String(),
           };
+
+          // Upload location update to S3 first
+          print('Uploading location update to S3...');
+          final s3UploadSuccess = await S3Service.uploadReport(locationUpdate);
+          
+          if (!s3UploadSuccess) {
+            print('Warning: Location update could not be backed up to S3');
+          } else {
+            print('✅ Location update successfully uploaded to S3');
+          }
 
           // Send location update based on configuration
           if (Config.useDemoMode) {
