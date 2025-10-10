@@ -51,12 +51,6 @@ A Flutter emergency response application with flood risk mapping and SOS functio
    flutter run
    ```
 
-## Security Notes
-
-- The `config.dart` file is gitignored to prevent exposing API keys
-- Never commit API keys to version control
-- Use the `config.example.dart` file as a template for other developers
-
 ## Project Structure
 
 - `lib/main.dart` - Main app entry point with navigation
@@ -65,20 +59,3 @@ A Flutter emergency response application with flood risk mapping and SOS functio
 - `lib/config.dart` - API keys and configuration (gitignored)
 - `lib/config.example.dart` - Example configuration template
 
-## API Keys Required
-
-- **Google Maps API**: For map display and routing functionality
-- **AWS API** (optional): For SOS message transmission
-- **Geolocator**: For location services (no API key required)
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Ensure `config.dart` is not committed
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License.
