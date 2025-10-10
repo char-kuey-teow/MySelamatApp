@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'profile.dart';
 import 'config.dart';
 import 'services/s3_service.dart';
+import 'services/sos_state_service.dart';
+import 'services/dynamodb_service.dart';
 
 // --- Placeholder for the Home Screen ---
 // In a real app, this would be your FloodSafeScreen from the earlier file.
@@ -91,6 +93,10 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   String _userId = 'demo_user_123';
   String _userName = 'Demo User';
 
+  // Persistent SOS state
+  LocalSOSState? _persistentSOSState;
+  String? _currentSOSId; // Track current SOS ID for DynamoDB updates
+
   // Performance optimization: Cache location data
   Position? _cachedPosition;
   DateTime? _lastLocationUpdate;
@@ -112,6 +118,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
     // Initialize location services and load user profile
     _initializeLocation();
     _loadUserProfile();
+    _loadPersistentSOSState();
   }
 
   @override
@@ -135,6 +142,16 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
 
   void _onSosDown(BuildContext context, TapDownDetails details) {
     if (_showCategories || _isSosActive) return;
+    
+    // Check if there's already an active SOS
+    if (_persistentSOSState?.isActive == true) {
+      _showStatusMessage(
+        context,
+        'You already have an active SOS. Please resolve or cancel it first.',
+        isError: true,
+      );
+      return;
+    }
 
     HapticFeedback.lightImpact();
     setState(() {
@@ -201,25 +218,65 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
     _pulseController.stop();
   }
 
-  void _cancelSos() {
-    setState(() {
-      _showCategories = false;
-      _isSosActive = false;
-      _currentStatus = '';
-      _isErrorStatus = false;
+  void _cancelSos() async {
+    try {
+      // Update DynamoDB status first
+      bool dynamoUpdateSuccess = false;
+      if (_currentSOSId != null) {
+        dynamoUpdateSuccess = await DynamoDBService.updateSOSStatus(
+          _currentSOSId!, 
+          'cancelled',
+          reason: 'User cancelled SOS'
+        );
+        
+        if (!dynamoUpdateSuccess) {
+          print('⚠️ DynamoDB update failed, trying S3 fallback');
+          final statusUpdate = {
+            'sosId': _persistentSOSState?.sosId ?? _currentSOSId!,
+            'newStatus': 'cancelled',
+            'reason': 'User cancelled SOS',
+            'timestamp': DateTime.now().toIso8601String(),
+            'userId': _userId,
+          };
+          await S3Service.uploadSOSStatusUpdate(statusUpdate);
+        }
+      }
 
-      // Reset all SOS-related data
-      _sentCategory = null;
-      _sentLocation = null;
-      _sentTimestamp = null;
-      _locationAddress = null;
-      _locationDetails = null;
-    });
+      // Add to history before clearing
+      if (_persistentSOSState != null) {
+        final cancelledState = _persistentSOSState!.copyWith(
+          status: 'cancelled',
+          isActive: false,
+        );
+        await SOSStateService.addToHistory(cancelledState);
+      }
+      
+      // Clear persistent state
+      await SOSStateService.clearActiveSOS();
+      
+      setState(() {
+        _showCategories = false;
+        _isSosActive = false;
+        _currentStatus = '';
+        _isErrorStatus = false;
+        _persistentSOSState = null;
+        _currentSOSId = null;
 
-    // Cancel any ongoing timers
-    _locationUpdateTimer?.cancel();
+        // Reset all SOS-related data
+        _sentCategory = null;
+        _sentLocation = null;
+        _sentTimestamp = null;
+        _locationAddress = null;
+        _locationDetails = null;
+      });
 
-    print('SOS cancelled - returning to initial state');
+      // Cancel any ongoing timers
+      _locationUpdateTimer?.cancel();
+
+      print('SOS cancelled - returning to initial state');
+    } catch (e) {
+      print('❌ Error cancelling SOS: $e');
+    }
   }
 
   void _showStatusMessage(
@@ -255,18 +312,60 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
     });
   }
 
-  void _markSafe() {
-    setState(() {
-      _isSosActive = false;
-      _currentStatus = '';
+  void _markSafe() async {
+    try {
+      // Update DynamoDB status first
+      bool dynamoUpdateSuccess = false;
+      if (_currentSOSId != null) {
+        dynamoUpdateSuccess = await DynamoDBService.updateSOSStatus(
+          _currentSOSId!, 
+          'resolved',
+          reason: 'User marked as safe'
+        );
+        
+        if (!dynamoUpdateSuccess) {
+          print('⚠️ DynamoDB update failed, trying S3 fallback');
+          final statusUpdate = {
+            'sosId': _persistentSOSState?.sosId ?? _currentSOSId!,
+            'newStatus': 'resolved',
+            'reason': 'User marked as safe',
+            'timestamp': DateTime.now().toIso8601String(),
+            'userId': _userId,
+          };
+          await S3Service.uploadSOSStatusUpdate(statusUpdate);
+        }
+      }
 
-      _sentCategory = null;
-      _sentLocation = null;
-      _sentTimestamp = null;
-      _locationAddress = null;
-      _locationDetails = null;
-    });
-    _locationUpdateTimer?.cancel();
+      // Add to history before clearing
+      if (_persistentSOSState != null) {
+        final resolvedState = _persistentSOSState!.copyWith(
+          status: 'resolved',
+          isActive: false,
+        );
+        await SOSStateService.addToHistory(resolvedState);
+      }
+      
+      // Clear persistent state
+      await SOSStateService.clearActiveSOS();
+      
+      setState(() {
+        _isSosActive = false;
+        _currentStatus = '';
+        _persistentSOSState = null;
+        _currentSOSId = null;
+
+        _sentCategory = null;
+        _sentLocation = null;
+        _sentTimestamp = null;
+        _locationAddress = null;
+        _locationDetails = null;
+      });
+      _locationUpdateTimer?.cancel();
+      
+      print('SOS marked as safe - state cleared');
+    } catch (e) {
+      print('❌ Error marking SOS as safe: $e');
+    }
   }
 
   // User Profile Loading Method
@@ -289,7 +388,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
         print('SOS: User profile loaded from SharedPreferences:');
         print('- Name: ${userProfile.displayName}');
         print('- Email: ${userProfile.email}');
-        print('- Phone: ${userProfile.phoneNumber ?? "null"}');
+        print('- Phone: ${userProfile.phoneNumber}');
         print('- Address: ${userProfile.address}');
         print('- Regions: ${userProfile.floodRegions}');
       } else {
@@ -298,6 +397,48 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
     } catch (e) {
       print('SOS: Error loading user profile: $e');
       // Continue with demo data
+    }
+  }
+
+  // Load persistent SOS state from local storage
+  Future<void> _loadPersistentSOSState() async {
+    try {
+      final sosState = await SOSStateService.loadActiveSOS();
+      
+      if (sosState != null && sosState.isActive) {
+        setState(() {
+          _persistentSOSState = sosState;
+          _isSosActive = true;
+          _sentCategory = sosState.category;
+          _sentTimestamp = sosState.timestamp;
+          _locationAddress = sosState.area;
+          _locationDetails = sosState.locationDetails;
+          _currentSOSId = sosState.sosId;
+          
+          // Reconstruct Position object if we have coordinates
+          if (sosState.latitude != null && sosState.longitude != null) {
+            _sentLocation = Position(
+              latitude: sosState.latitude!,
+              longitude: sosState.longitude!,
+              timestamp: sosState.timestamp ?? DateTime.now(),
+              accuracy: sosState.accuracy ?? 0.0,
+              altitude: sosState.altitude ?? 0.0,
+              speed: sosState.speed ?? 0.0,
+              heading: sosState.heading ?? 0.0,
+              speedAccuracy: 0.0,
+              headingAccuracy: 0.0,
+              altitudeAccuracy: 0.0,
+            );
+          }
+        });
+        
+        // Start location updates if SOS is active
+        _startLocationUpdates();
+        
+        print('✅ Persistent SOS state restored: ${sosState.category}');
+      }
+    } catch (e) {
+      print('❌ Error loading persistent SOS state: $e');
     }
   }
 
@@ -901,6 +1042,9 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
         isError: false,
       );
 
+      // Generate unique SOS ID for DynamoDB tracking
+      final sosId = DynamoDBService.generateSOSId(_userId);
+
       // Get current timestamp
       final currentTimestamp = DateTime.now();
 
@@ -910,6 +1054,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
         'userName': _userName,
         'userEmail': _currentUserProfile?.email ?? 'demo@myselamat.com',
         'userAddress': _currentUserProfile?.address ?? 'Demo Address',
+        'sosId': sosId, // ✅ Add SOS ID to S3 data
         'category': category,
         'latitude': position.latitude,
         'longitude': position.longitude,
@@ -929,7 +1074,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
 
       // Add phone number only if it exists and is not empty
       if (_currentUserProfile?.hasPhoneNumber == true) {
-        sosData['userPhone'] = _currentUserProfile!.phoneNumber!;
+        sosData['userPhone'] = _currentUserProfile!.phoneNumber;
       }
 
       // Upload SOS data to S3 first
@@ -968,10 +1113,33 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
         }
       }
 
+      // Save persistent SOS state
+      final persistentState = LocalSOSState(
+        isActive: true,
+        category: category,
+        timestamp: currentTimestamp,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        coordinates: locationDetails['coordinates'],
+        area: locationDetails['area'],
+        state: locationDetails['state'],
+        accuracy: position.accuracy,
+        altitude: position.altitude,
+        speed: position.speed,
+        heading: position.heading,
+        status: 'active',
+        locationDetails: locationDetails,
+        sosId: sosId, // Save the SOS ID for future updates
+      );
+      
+      await SOSStateService.saveActiveSOS(persistentState);
+
       // For demo purposes, always succeed
       setState(() {
         _isSosActive = true;
         _showCategories = false;
+        _persistentSOSState = persistentState;
+        _currentSOSId = sosId;
 
         _sentCategory = category;
         _sentLocation = position;
@@ -1155,20 +1323,19 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                         ),
                       ),
                     ),
-                    if (_isSosActive)
-                      TextButton(
-                        onPressed: _markSafe,
-                        child: const Text(
-                          'Mark Safe',
-                          style: TextStyle(color: Colors.green, fontSize: 12),
-                        ),
-                      ),
                   ],
                 ),
               ),
             ],
 
             _buildSentSosDetails(),
+
+            // Action buttons for active SOS
+            if (_isSosActive) ...[
+              const SizedBox(height: 20),
+              _buildSOSActionButtons(),
+            ],
+
             // "Choose your incident type" header (only show when categories are visible)
             if (_showCategories) ...[
               Align(
@@ -1181,8 +1348,11 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
               const SizedBox(height: 8.0),
             ],
 
-            const Text(
-              'Emergency Request',
+            // Emergency Request Section - only show when no active SOS
+            if (!_isSosActive) ...[
+              const SizedBox(height: 20),
+              const Text(
+                'Emergency Request',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -1285,9 +1455,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
               const SizedBox(height: 8.0),
               // Push to Talk button with different styling
               _buildPushToTalkButton(),
-              const SizedBox(height: 8.0),
-              // Cancel button - appears after 3-second hold
-              _buildCancelButton(),
+            ],
             ],
           ],
         ),
@@ -1296,6 +1464,54 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   }
 
   // --- Widget Builders ---
+
+  Widget _buildSOSActionButtons() {
+    return Column(
+      children: [
+        // Mark Safe Button
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+            label: const Text(
+              'Mark Safe',
+              style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            onPressed: _markSafe,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 3,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Cancel SOS Button
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.cancel_outlined, color: Colors.white, size: 20),
+            label: const Text(
+              'Cancel SOS',
+              style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            onPressed: _cancelSos,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 3,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _buildSosButton(BuildContext context) {
     return GestureDetector(
@@ -1403,25 +1619,6 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildCancelButton() {
-    return ElevatedButton.icon(
-      icon: const Icon(Icons.cancel_outlined, color: Colors.white, size: 18),
-      label: const Text(
-        'Cancel SOS',
-        style: TextStyle(fontSize: 12, color: Colors.white),
-      ),
-      onPressed: _cancelSos,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.red.withOpacity(0.2),
-        minimumSize: const Size(double.infinity, 40),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: const BorderSide(color: Colors.red, width: 2),
-        ),
-        elevation: 0,
-      ),
-    );
-  }
 
   Widget _buildSentSosDetails() {
     if (!_isSosActive ||
@@ -1472,7 +1669,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                 _buildDetailRow(
                   icon: Icons.phone_outlined,
                   label: 'Phone',
-                  value: _currentUserProfile!.phoneNumber!,
+                  value: _currentUserProfile!.phoneNumber,
                   color: Colors.white70,
                 ),
               _buildDetailRow(
