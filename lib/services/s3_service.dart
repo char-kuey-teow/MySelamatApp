@@ -253,6 +253,56 @@ class S3Service {
     }
   }
 
+  /// Upload SOS status update to S3 (fallback for DynamoDB failures)
+  static Future<bool> uploadSOSStatusUpdate(Map<String, dynamic> statusUpdate) async {
+    try {
+      print('📤 Uploading SOS status update to S3...');
+      
+      // Validate configuration
+      if (!_validateConfig()) {
+        print('❌ Invalid S3 configuration');
+        return false;
+      }
+
+      // Convert to JSON
+      final jsonString = jsonEncode(statusUpdate);
+      final bytes = utf8.encode(jsonString);
+
+      // Generate filename with timestamp
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final sosId = statusUpdate['sosId'] ?? 'unknown';
+      final filename = 'sos-updates/sos_update_${sosId}_$timestamp.json';
+
+      // Create AWS credentials
+      final credentials = AwsClientCredentials(
+        accessKey: _accessKey,
+        secretKey: _secretKey,
+      );
+
+      // Create S3 client
+      final s3Client = S3(
+        region: _region,
+        credentials: credentials,
+      );
+
+      // Upload to S3
+      final response = await s3Client.putObject(
+        bucket: _bucketName,
+        key: filename,
+        body: bytes,
+        contentType: 'application/json',
+      );
+
+      print('✅ SOS status update uploaded successfully to S3');
+      print('📁 File: $filename');
+      print('ETag: ${response.eTag}');
+      return true;
+    } catch (e) {
+      print('❌ Error uploading SOS status update to S3: $e');
+      return false;
+    }
+  }
+
   /// Test S3 connection using AWS SDK
   static Future<bool> testConnection() async {
     try {
