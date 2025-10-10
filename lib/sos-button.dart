@@ -11,6 +11,7 @@ import 'config.dart';
 import 'services/s3_service.dart';
 import 'services/sos_state_service.dart';
 import 'services/dynamodb_service.dart';
+import 'services/flood_zone_service.dart';
 
 // --- Placeholder for the Home Screen ---
 // In a real app, this would be your FloodSafeScreen from the earlier file.
@@ -153,6 +154,80 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
       return;
     }
 
+    // Check if user is in flood zone before allowing SOS
+    _checkFloodZoneAndProceed(context);
+  }
+
+  void _onSosUp(BuildContext context, TapUpDetails details) => _resetSosState();
+  void _onSosCancel() => _resetSosState();
+
+  void _resetSosState() {
+    setState(() {
+      _isSosPressed = false;
+      _isHolding = false;
+      _sosScale = 1.0;
+      _holdProgress = 0;
+    });
+
+    _pulseController.stop();
+    _holdTimer?.cancel();
+  }
+
+  void _onHoldComplete(BuildContext context) {
+    HapticFeedback.vibrate();
+    setState(() {
+      _showCategories = true;
+      _isHolding = false;
+      _sosScale = 1.0;
+    });
+
+    _pulseController.stop();
+  }
+
+  /// Check if user is in flood zone and proceed with SOS or show restriction message
+  Future<void> _checkFloodZoneAndProceed(BuildContext context) async {
+    try {
+      // Get current user location
+      final position = await _getCurrentLocationForFloodCheck();
+      if (position == null) {
+        _showStatusMessage(
+          context,
+          'Unable to determine your location. Please check location permissions.',
+          isError: true,
+        );
+        return;
+      }
+
+      // Check if user is in flood zone
+      final isInFloodZone = await FloodZoneService.isUserInFloodZone(position);
+      
+      if (!isInFloodZone) {
+        // Log the attempt for analytics
+        await FloodZoneService.logSOSAttemptOutsideFloodZone(position);
+        
+        // Show restriction message
+        _showStatusMessage(
+          context,
+          'For your safety, SOS is only available in active flood zones. This ensures emergency responders can reach those in immediate danger.',
+          isError: true,
+        );
+        return;
+      }
+
+      // User is in flood zone, proceed with SOS
+      _startSOSHoldSequence(context);
+    } catch (e) {
+      debugPrint('❌ Error checking flood zone: $e');
+      _showStatusMessage(
+        context,
+        'Unable to verify flood zone status. Please try again.',
+        isError: true,
+      );
+    }
+  }
+
+  /// Start the SOS hold sequence (moved from _onSosDown)
+  void _startSOSHoldSequence(BuildContext context) {
     HapticFeedback.lightImpact();
     setState(() {
       _isSosPressed = true;
@@ -192,30 +267,33 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
     });
   }
 
-  void _onSosUp(BuildContext context, TapUpDetails details) => _resetSosState();
-  void _onSosCancel() => _resetSosState();
+  /// Get current user location with error handling for flood zone check
+  Future<Position?> _getCurrentLocationForFloodCheck() async {
+    try {
+      // Check location permission first
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          return null;
+        }
+      }
 
-  void _resetSosState() {
-    setState(() {
-      _isSosPressed = false;
-      _isHolding = false;
-      _sosScale = 1.0;
-      _holdProgress = 0;
-    });
+      if (permission == LocationPermission.deniedForever) {
+        return null;
+      }
 
-    _pulseController.stop();
-    _holdTimer?.cancel();
-  }
+      // Get current position
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
+      );
 
-  void _onHoldComplete(BuildContext context) {
-    HapticFeedback.vibrate();
-    setState(() {
-      _showCategories = true;
-      _isHolding = false;
-      _sosScale = 1.0;
-    });
-
-    _pulseController.stop();
+      return position;
+    } catch (e) {
+      debugPrint('❌ Error getting current location: $e');
+      return null;
+    }
   }
 
   void _cancelSos() async {
@@ -1328,6 +1406,92 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
               ),
             ],
 
+            // Persistent SOS Status Panel (always show when SOS is active)
+            if (_isSosActive && _persistentSOSState != null) ...[
+              Container(
+                padding: const EdgeInsets.all(16.0),
+                margin: const EdgeInsets.only(bottom: 16.0),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red, width: 2),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.emergency,
+                          color: Colors.red,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'EMERGENCY ACTIVE',
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            'LIVE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (_persistentSOSState!.category != null) ...[
+                      _buildStatusDetailRow(
+                        icon: Icons.category,
+                        label: 'Emergency Type',
+                        value: _persistentSOSState!.category!,
+                        color: Colors.red,
+                      ),
+                    ],
+                    if (_persistentSOSState!.area != null) ...[
+                      _buildStatusDetailRow(
+                        icon: Icons.location_on,
+                        label: 'Location',
+                        value: _persistentSOSState!.area!,
+                        color: Colors.red,
+                      ),
+                    ],
+                    if (_persistentSOSState!.timestamp != null) ...[
+                      _buildStatusDetailRow(
+                        icon: Icons.access_time,
+                        label: 'Sent At',
+                        value: _formatTimestamp(_persistentSOSState!.timestamp!),
+                        color: Colors.red,
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Emergency responders have been notified. Stay safe and follow their instructions.',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             _buildSentSosDetails(),
 
             // Action buttons for active SOS
@@ -1730,6 +1894,59 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
         ),
       ),
     );
+  }
+
+  /// Build status detail row for the persistent SOS status panel
+  Widget _buildStatusDetailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: color.withOpacity(0.8)),
+          const SizedBox(width: 8),
+          Text(
+            '$label:',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Colors.white70,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Format timestamp for display
+  String _formatTimestamp(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+    
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else {
+      return '${timestamp.day}/${timestamp.month} ${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
+    }
   }
 
   Widget _buildDetailRow({

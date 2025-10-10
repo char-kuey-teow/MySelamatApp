@@ -4,13 +4,87 @@ import 'sos-button.dart';
 import 'text_chatbot.dart';
 import 'profile.dart';
 import 'flood-map.dart';
+import 'services/sos_state_service.dart';
 
 // -------------------------------------------------------------
 // Home Screen with AppBar wrapper for FloodMapWidget
 // -------------------------------------------------------------
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+  bool _showSOSNotification = false;
+  LocalSOSState? _activeSOSState;
+  late AnimationController _slideController;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // Initialize slide animation
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0.0, -1.0), // Start above screen
+      end: const Offset(0.0, 0.0),    // End at normal position
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeInOut,
+    ));
+    
+    _checkActiveSOSOnStartup();
+  }
+
+  @override
+  void dispose() {
+    _slideController.dispose();
+    super.dispose();
+  }
+
+  /// Check for active SOS on app startup and show notification
+  Future<void> _checkActiveSOSOnStartup() async {
+    try {
+      final sosState = await SOSStateService.loadActiveSOS();
+      if (sosState != null && sosState.isActive) {
+        setState(() {
+          _activeSOSState = sosState;
+          _showSOSNotification = true;
+        });
+        
+        // Slide down animation
+        _slideController.forward();
+        
+        // Hide notification after 5 seconds with slide up animation
+        Future.delayed(const Duration(seconds: 5), () {
+          if (mounted) {
+            _hideNotification();
+          }
+        });
+      }
+    } catch (e) {
+      print('Error checking active SOS on startup: $e');
+    }
+  }
+
+  /// Hide notification with slide up animation
+  void _hideNotification() {
+    _slideController.reverse().then((_) {
+      if (mounted) {
+        setState(() {
+          _showSOSNotification = false;
+        });
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +110,73 @@ class HomeScreen extends StatelessWidget {
           child: Container(height: 10.0, color: const Color(0xFF2254C5)),
         ),
       ),
-      body: const FloodMapWidget(),
+      body: Stack(
+        children: [
+          const FloodMapWidget(),
+          
+          // SOS Notification Banner
+          if (_showSOSNotification) _buildSOSNotificationBanner(),
+        ],
+      ),
+    );
+  }
+
+  /// Build SOS notification banner that appears at the top
+  Widget _buildSOSNotificationBanner() {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: Container(
+          height: 60,
+          color: Colors.red,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.warning,
+                color: Colors.white,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      'SOS ACTIVE',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (_activeSOSState?.category != null)
+                      Text(
+                        'Emergency: ${_activeSOSState!.category}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: _hideNotification,
+                child: const Icon(
+                  Icons.close,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
