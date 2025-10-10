@@ -1,0 +1,79 @@
+/// Backend configuration for AWS services
+/// 
+/// IMPORTANT: Copy this file to backend_config.dart and replace placeholder values
+/// with your actual AWS credentials. Never commit real credentials to version control.
+class BackendConfig {
+  // ========================================
+  // SECURITY WARNING: 
+  // Replace these placeholder values with your actual AWS credentials
+  // For production, use environment variables or backend services
+  // ========================================
+  
+  // AWS Credentials - Replace with your actual IAM user credentials
+  static const String accessKeyId = 'YOUR_AWS_ACCESS_KEY_ID';
+  static const String secretAccessKey = 'YOUR_AWS_SECRET_ACCESS_KEY';
+  
+  // AWS Region
+  static const String region = 'us-east-1';
+  
+  // SNS Platform Application ARN - Replace with your actual ARN from AWS SNS Console
+  static const String platformApplicationArn = 'arn:aws:sns:us-east-1:YOUR_ACCOUNT_ID:app/GCM/MySelamatApp';
+  
+  // SNS Topic ARN for general notifications (optional)
+  static const String? topicArn = null; // 'arn:aws:sns:us-east-1:YOUR_ACCOUNT_ID:MySelamatTopic';
+  
+  // Firebase Service Account JSON file path
+  // The actual JSON file is stored in assets/config/ferrous-osprey-472705-r2-bbf8352be95d.json
+  // Use FirebaseConfigService.loadConfig() to read the JSON file
+  static const String firebaseConfigPath = 'assets/config/ferrous-osprey-472705-r2-bbf8352be95d.json';
+  
+  // ========================================
+  // CONFIGURATION EXPLANATION:
+  // ========================================
+  // 
+  // 1. AWS Credentials: Used to authenticate with AWS SNS
+  //    - Access Key ID: Your AWS IAM user's access key
+  //    - Secret Access Key: Your AWS IAM user's secret key
+  //    - These should have SNS publish permissions
+  //
+  // 2. AWS Region: The AWS region where your SNS Platform Application is created
+  //    - Must match the region of your SNS Platform Application
+  //
+  // 3. SNS Platform Application ARN: Identifies your app in AWS SNS
+  //    - Created in AWS SNS Console > Push notifications > Platform applications
+  //    - Format: arn:aws:sns:region:account:app/GCM/YourAppName
+  //
+  // 4. Firebase Service Account JSON: Links SNS with Firebase FCM
+  //    - Get from Firebase Console > Project Settings > Service Accounts
+  //    - Download the service account JSON file
+  //    - Used for server-side Firebase Admin SDK authentication
+  //
+  // WHERE TO CONFIGURE:
+  // - AWS SNS Console: Create Platform Application (uses Firebase Server Key from Cloud Messaging)
+  // - Firebase Console: Get Server Key from Cloud Messaging tab (for SNS Platform Application)
+  // - Firebase Console: Get Service Account JSON from Service Accounts tab (for server-side auth)
+  // - This file: Update the ARN and credentials
+  //
+  // SECURITY BEST PRACTICES:
+  // - Use environment variables for credentials in production
+  // - Use IAM roles instead of access keys when possible
+  // - Consider using a backend service instead of direct AWS calls
+  // ========================================
+  
+  /// Check if configuration is properly set up
+  static bool get isConfigured {
+    return accessKeyId != 'YOUR_AWS_ACCESS_KEY_ID' &&
+           secretAccessKey != 'YOUR_AWS_SECRET_ACCESS_KEY' &&
+           platformApplicationArn != 'arn:aws:sns:us-east-1:YOUR_ACCOUNT_ID:app/GCM/MySelamatApp';
+  }
+  
+  /// Get configuration status for debugging
+  static Map<String, bool> get configurationStatus {
+    return {
+      'accessKeyId': accessKeyId != 'YOUR_AWS_ACCESS_KEY_ID',
+      'secretAccessKey': secretAccessKey != 'YOUR_AWS_SECRET_ACCESS_KEY',
+      'platformApplicationArn': platformApplicationArn != 'arn:aws:sns:us-east-1:YOUR_ACCOUNT_ID:app/GCM/MySelamatApp',
+      'firebaseConfigFile': firebaseConfigPath.isNotEmpty,
+    };
+  }
+}
