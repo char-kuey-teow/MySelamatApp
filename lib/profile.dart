@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'firebase_service.dart';
@@ -324,6 +323,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _showErrorSnackBar('Failed to activate demo mode');
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _signInWithCognito() async {
+    try {
+      const url = 'https://cognitoedu.org/login';
+      final Uri cognitoUri = Uri.parse(url);
+      
+      if (await canLaunchUrl(cognitoUri)) {
+        await launchUrl(cognitoUri, mode: LaunchMode.externalApplication);
+      } else {
+        _showErrorSnackBar('Could not open Cognito login page');
+      }
+    } catch (error) {
+      print('Error opening Cognito login: $error');
+      _showErrorSnackBar('Failed to open Cognito login page');
     }
   }
 
@@ -787,6 +802,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
             width: double.infinity,
             height: 50,
             child: OutlinedButton.icon(
+              onPressed: _signInWithCognito,
+              icon: const Icon(Icons.cloud, color: Color(0xFF2254C5)),
+              label: const Text(
+                'Sign in with AWS Cognito',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF2254C5),
+                side: const BorderSide(color: Color(0xFF2254C5)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton.icon(
               onPressed: _signInDemo,
               icon: const Icon(Icons.person_add, color: Color(0xFF2254C5)),
               label: const Text(
@@ -804,7 +839,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Sign in with your Google account or use Demo Mode for testing.',
+            'Sign in with Google, AWS Cognito, or use Demo Mode for testing.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,

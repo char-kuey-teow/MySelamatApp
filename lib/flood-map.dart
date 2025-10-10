@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'config.dart';
+import 'report.dart';
 import 'services/cache_service.dart';
 import 'services/geometry_service.dart';
 
@@ -2217,19 +2218,22 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
               ),
               const SizedBox(height: 32.0),
 
-              // 4. Emergency Escape Button (Placeholder logic)
+              // 4. Emergency Escape Button
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: ElevatedButton(
                   onPressed: () {
-                    /* Handle emergency action */
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const ReportScreen()),
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFC62828),
                     minimumSize: const Size(double.infinity, 50),
                   ),
                   child: const Text(
-                    'Emergency Escape',
+                    'Incident Report',
                     style: TextStyle(color: Colors.white, fontSize: 20),
                   ),
                 ),
