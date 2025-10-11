@@ -3,10 +3,15 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'config.dart';
+import 'report.dart';
+import 'services/cache_service.dart';
+import 'services/geometry_service.dart';
 
 // --- 1. CONFIGURATION CONSTANTS (from map.js) ---
 const bool USE_MOCKS = false;
@@ -156,26 +161,27 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
   // Dynamic marker filtering
   List<SafeZone> _allSafeZones = []; // Store all safe zones from API
   LatLng? _currentMapCenter; // Track current map center
+  
+  // Periodic refresh timer
+  Timer? _floodDataRefreshTimer;
 
   // --- 4. LIFECYCLE AND INITIALIZATION ---
 
-  // Load custom user location icon with resizing
+  // Load custom user location icon with resizing (optimized for performance)
   Future<void> _loadUserLocationIcon() async {
     try {
       debugPrint('Loading user location icon from assets/icons/blue_ping.png');
       final ByteData data = await rootBundle.load('assets/icons/blue_ping.png');
       final Uint8List bytes = data.buffer.asUint8List();
       
-      // Resize the image to desired marker size
-      final img.Image? originalImage = img.decodeImage(bytes);
-      if (originalImage != null) {
-        // Resize to 60x60 pixels (adjust these values to change marker size)
-        final img.Image resizedImage = img.copyResize(originalImage, width: 60, height: 60);
-        final Uint8List resizedBytes = Uint8List.fromList(img.encodePng(resizedImage));
+      // Use compute to run image processing in isolate (off main thread)
+      final Uint8List? resizedBytes = await compute(_processImageInIsolate, bytes);
+      
+      if (resizedBytes != null) {
         _userLocationIcon = BitmapDescriptor.fromBytes(resizedBytes);
         debugPrint('User location icon loaded and resized to 60x60 pixels');
       } else {
-        throw Exception('Failed to decode image');
+        throw Exception('Failed to process image');
       }
     } catch (e) {
       debugPrint('Failed to load user location icon: $e');
@@ -183,6 +189,22 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
       _userLocationIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue);
       debugPrint('Using fallback blue marker');
     }
+  }
+
+  // Static function to process image in isolate (runs off main thread)
+  static Uint8List? _processImageInIsolate(Uint8List bytes) {
+    try {
+      // Resize the image to desired marker size
+      final img.Image? originalImage = img.decodeImage(bytes);
+      if (originalImage != null) {
+        // Resize to 60x60 pixels (adjust these values to change marker size)
+        final img.Image resizedImage = img.copyResize(originalImage, width: 60, height: 60);
+        return Uint8List.fromList(img.encodePng(resizedImage));
+      }
+    } catch (e) {
+      debugPrint('Error processing image in isolate: $e');
+    }
+    return null;
   }
 
   // Add user location marker to the map
@@ -219,6 +241,7 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
   @override
   void dispose() {
     _riskPanelScrollController.dispose();
+    _floodDataRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -243,24 +266,28 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
 
     // Add user location marker immediately
     _addUserLocationMarker(userLoc);
-    debugPrint('🚀 Starting parallel loading...');
+    debugPrint('🚀 Starting optimized loading with cache...');
 
     try {
-      // Load both APIs in parallel for faster loading
-      final futures = await Future.wait([
-        _getLatestFloodData(),
-        _getSafeZonesData(),
-      ]);
+      // Check cache first for flood data only
+      final cachedFloodData = await CacheService.getCachedFloodData();
       
-      final latestData = futures[0];
-      final safeZones = futures[1] as List<SafeZone>;
+      List<SafeZone> safeZones = [];
+      dynamic latestData = cachedFloodData;
       
-      if (latestData != null) {
-        // Parse flood data
-        final friData = _parseFri(latestData);
+      // Use cached flood data if available, but always load safe zones fresh
+      if (cachedFloodData != null) {
+        debugPrint('✅ Using cached flood data for immediate display');
+        
+        // Show cached flood data immediately
+        final friData = _parseFri(cachedFloodData);
         _floodRiskInfoList = friData;
         
-        // Update UI components in parallel
+        // Load safe zones fresh from API
+        debugPrint('🔄 Loading safe zones fresh from API...');
+        safeZones = await _getSafeZonesData();
+        
+        // Update UI with cached flood data and fresh safe zones
         await Future.wait([
           Future(() => _drawFRI(friData)),
           Future(() {
@@ -272,9 +299,46 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
           Future(() => _setMapZoom(userLoc)),
         ]);
         
-        debugPrint('✅ Parallel loading completed - ${safeZones.length} safe zones loaded');
+        debugPrint('✅ Cached flood data + fresh safe zones loaded - ${safeZones.length} safe zones displayed');
+        
+        // Start periodic refresh timer (every 10 minutes)
+        _startPeriodicFloodDataRefresh();
       } else {
-        throw Exception('Failed to get latest flood data from API');
+        debugPrint('🔄 No cache available, loading from API...');
+        
+        // Load both APIs in parallel for faster loading
+        final futures = await Future.wait([
+          _getLatestFloodData(),
+          _getSafeZonesData(),
+        ]);
+        
+        latestData = futures[0];
+        safeZones = futures[1] as List<SafeZone>;
+        
+        if (latestData != null) {
+          // Parse flood data
+          final friData = _parseFri(latestData);
+          _floodRiskInfoList = friData;
+          
+          // Update UI components in parallel
+          await Future.wait([
+            Future(() => _drawFRI(friData)),
+            Future(() {
+              _allSafeZones = safeZones;
+              _currentMapCenter = userLoc;
+              _updateVisibleSafeZones(userLoc);
+            }),
+            Future(() => _assessUserRisk(userLoc, friData)),
+            Future(() => _setMapZoom(userLoc)),
+          ]);
+          
+          debugPrint('✅ API loading completed - ${safeZones.length} safe zones loaded');
+          
+          // Start periodic refresh timer (every 10 minutes)
+          _startPeriodicFloodDataRefresh();
+        } else {
+          throw Exception('Failed to get latest flood data from API');
+        }
       }
     } catch (e) {
       debugPrint('Map initialization error: $e');
@@ -788,22 +852,12 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
 
   /// Check if point is in any flood zone
   bool _isPointInFloodZone(LatLng point, FloodRiskInfo floodZone) {
-    for (var polygon in floodZone.polygons) {
-      if (_isPointInPolygon(point, polygon)) {
-        return true;
-      }
-    }
-    return false;
+    return GeometryService.isPointInAnyPolygon(point, floodZone.polygons);
   }
 
   /// Get center of polygon
   LatLng _getPolygonCenter(List<LatLng> polygon) {
-    double lat = 0, lng = 0;
-    for (var point in polygon) {
-      lat += point.latitude;
-      lng += point.longitude;
-    }
-    return LatLng(lat / polygon.length, lng / polygon.length);
+    return GeometryService.getPolygonCenter(polygon);
   }
 
   /// Decode Google polyline string to LatLng points
@@ -867,18 +921,21 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
     }
   }
 
-  /// Load safe zones data (extracted for parallel loading)
+  /// Load safe zones data (always fresh, no caching)
   Future<List<SafeZone>> _getSafeZonesData() async {
     try {
-      debugPrint('🔄 Loading safe zones...');
+      debugPrint('🔄 Loading safe zones fresh from API...');
       final response = await http.get(Uri.parse(SAFE_ZONES_LOCATIONS_API));
       
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
         if (data['success'] == true) {
-          final safeZones = _parseSafeZonesLocations(data['data']);
+          final safeZones = _parseSafeZonesLocations(data);
           debugPrint('✅ Safe zones loaded: ${safeZones.length} locations');
+          
+          // No caching - always fresh data
+          
           return safeZones;
         } else {
           throw Exception('API returned success: false');
@@ -907,9 +964,57 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
     }
   }
 
+  /// Start periodic refresh timer for flood data (every 10 minutes)
+  void _startPeriodicFloodDataRefresh() {
+    _floodDataRefreshTimer?.cancel(); // Cancel existing timer
+    
+    _floodDataRefreshTimer = Timer.periodic(const Duration(minutes: 10), (timer) {
+      debugPrint('⏰ 10-minute timer triggered - refreshing flood data...');
+      _refreshFloodDataInBackground();
+    });
+    
+    debugPrint('✅ Periodic flood data refresh started (every 10 minutes)');
+  }
+
+  /// Refresh flood data in background (every 10 minutes)
+  Future<void> _refreshFloodDataInBackground() async {
+    try {
+      debugPrint('🔄 Refreshing flood data in background (10-minute update)...');
+      
+      // Only refresh flood data, safe zones can stay cached longer
+      final freshFloodData = await _getLatestFloodData();
+      
+      if (freshFloodData != null) {
+        // Update UI with fresh flood data
+        final friData = _parseFri(freshFloodData);
+        _floodRiskInfoList = friData;
+        
+        // Redraw flood zones with fresh data
+        _drawFRI(friData);
+        
+        // Reassess user risk with fresh data
+        if (_userLocation != null) {
+          _assessUserRisk(_userLocation!, friData);
+        }
+        
+        // Update last updated timestamp
+        setState(() {
+          _lastUpdated = 'Last updated: ${DateTime.now().toString()}';
+        });
+        
+        debugPrint('✅ Background flood data refresh completed - UI updated');
+      }
+    } catch (e) {
+      debugPrint('❌ Background flood data refresh failed: $e');
+      // Don't show error to user since we have cached data
+    }
+  }
+
+
   // Get latest flood data from new API
   Future<dynamic> _getLatestFloodData() async {
     try {
+      debugPrint('🔄 Loading flood data from API...');
       final response = await http.get(Uri.parse(FLOOD_LOCATIONS_API));
       
       if (response.statusCode == 200) {
@@ -918,6 +1023,9 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
         if (data['success'] == true) {
           final locationsData = data['data'];
           debugPrint('✅ Flood data loaded: ${locationsData.length} locations');
+          
+          // Cache the full API response for future use
+          await CacheService.cacheFloodData(data);
           
           // 🔍 INVESTIGATION: Check what locations we're getting
           debugPrint('🔍 INVESTIGATION - Flood API Response Analysis:');
@@ -945,10 +1053,27 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
 
   List<FloodRiskInfo> _parseFri(dynamic data) {
     final List<FloodRiskInfo> floodRiskInfoList = [];
+    
+    // Handle both API response format and cached format
+    List<dynamic> locationsData;
     if (data is List) {
-      debugPrint('🔍 INVESTIGATION - Parsing Flood Data:');
-      for (int i = 0; i < data.length; i++) {
-        var location = data[i];
+      // Direct list format (from API call)
+      debugPrint('🔍 INVESTIGATION - Parsing Flood Data (Direct List):');
+      locationsData = data;
+    } else if (data is Map && data['success'] == true && data['data'] != null) {
+      // API response format (from cache)
+      debugPrint('🔍 INVESTIGATION - Parsing Flood Data (Cached API Response):');
+      locationsData = data['data'] as List<dynamic>;
+    } else {
+      debugPrint('❌ Invalid flood data format: ${data.runtimeType}');
+      return floodRiskInfoList;
+    }
+    
+    debugPrint('📊 Processing ${locationsData.length} flood locations');
+    
+    if (locationsData.isNotEmpty) {
+      for (int i = 0; i < locationsData.length; i++) {
+        var location = locationsData[i];
         if (location is Map<String, dynamic>) {
           // Handle decagon coordinates from new API
           List<LatLng> decagonPolygon = [];
@@ -1023,7 +1148,7 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
     return floodRiskInfoList;
   }
 
-  /// Parse new safe zones locations format from API
+  /// Parse safe zones locations from API response
   List<SafeZone> _parseSafeZonesLocations(dynamic data) {
     debugPrint('🔍 PARSING SAFE ZONES LOCATIONS:');
     debugPrint('   Data type: ${data.runtimeType}');
@@ -1034,35 +1159,37 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
       return [];
     }
     
-    if (data['locations'] == null) {
-      debugPrint('   ❌ Data locations is null');
-      debugPrint('   Available keys: ${data.keys.toList()}');
+    // Handle API response format: {success: true, data: {locations: [...]}}
+    if (data is Map && data['success'] == true && data['data'] != null && data['data']['locations'] != null) {
+      debugPrint('   📋 Processing API response format');
+      final locations = data['data']['locations'] as List<dynamic>;
+      debugPrint('   📊 Locations list length: ${locations.length}');
+      
+      final parsedZones = locations.map((location) {
+        try {
+          final zone = SafeZone(
+            name: location['name'] ?? '',
+            type: location['type'] ?? 'unknown',
+            location: LatLng(
+              location['latitude'] as double, 
+              location['longitude'] as double,
+            ),
+          );
+          debugPrint('   ✅ Parsed: ${zone.name} (${zone.type})');
+          return zone;
+        } catch (e) {
+          debugPrint('   ❌ Failed to parse location: $location - Error: $e');
+          return null;
+        }
+      }).where((zone) => zone != null).cast<SafeZone>().toList();
+      
+      debugPrint('   🎯 Successfully parsed ${parsedZones.length} zones');
+      return parsedZones;
+    } else {
+      debugPrint('   ❌ Invalid API response format');
+      debugPrint('   Available keys: ${data is Map ? data.keys.toList() : 'Not a map'}');
       return [];
     }
-    
-    final locations = data['locations'] as List<dynamic>;
-    debugPrint('   📊 Locations list length: ${locations.length}');
-    
-    final parsedZones = locations.map((location) {
-      try {
-        final zone = SafeZone(
-          name: location['name'] ?? '',
-          type: location['type'] ?? 'unknown',
-          location: LatLng(
-            location['latitude'] as double, 
-            location['longitude'] as double,
-          ),
-        );
-        debugPrint('   ✅ Parsed: ${zone.name} (${zone.type})');
-        return zone;
-      } catch (e) {
-        debugPrint('   ❌ Failed to parse location: $location - Error: $e');
-        return null;
-      }
-    }).where((zone) => zone != null).cast<SafeZone>().toList();
-    
-    debugPrint('   🎯 Successfully parsed ${parsedZones.length} zones');
-    return parsedZones;
   }
 
 
@@ -1112,8 +1239,12 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
   }
 
   void _drawSafeZones(List<SafeZone> safeZones) {
+    debugPrint('🎨 DRAWING SAFE ZONES:');
+    debugPrint('   Input safe zones: ${safeZones.length}');
+    
     final Set<Marker> safeZoneMarkers = {};
     for (var s in safeZones) {
+      debugPrint('   📍 Adding marker: ${s.name} (${s.type}) at ${s.location.latitude}, ${s.location.longitude}');
       safeZoneMarkers.add(
         Marker(
           markerId: MarkerId(s.name),
@@ -1172,7 +1303,12 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
 
   /// Update visible safe zones based on current map center (10km radius)
   void _updateVisibleSafeZones(LatLng mapCenter) {
+    debugPrint('🔍 UPDATING VISIBLE SAFE ZONES:');
+    debugPrint('   Total safe zones: ${_allSafeZones.length}');
+    debugPrint('   Map center: ${mapCenter.latitude}, ${mapCenter.longitude}');
+    
     if (_allSafeZones.isEmpty) {
+      debugPrint('   ❌ No safe zones available');
       return;
     }
     
@@ -1185,8 +1321,12 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
       return distance <= 10000; // 10km in meters
     }).toList();
     
+    debugPrint('   📍 Nearby zones (10km): ${nearbyZones.length}');
+    
     // Apply flood zone filtering rule: only hospitals inside flood zones
     final filteredZones = _filterSafeZonesByFloodZones(nearbyZones);
+    
+    debugPrint('   🎯 Filtered zones: ${filteredZones.length}');
     
     // Clear existing safe zone markers and add new ones
     _clearSafeZoneMarkers();
@@ -1197,7 +1337,12 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
 
   /// Filter safe zones based on flood zone rules: only hospitals inside flood zones
   List<SafeZone> _filterSafeZonesByFloodZones(List<SafeZone> safeZones) {
+    debugPrint('🔍 FILTERING SAFE ZONES BY FLOOD ZONES:');
+    debugPrint('   Input safe zones: ${safeZones.length}');
+    debugPrint('   Flood zones available: ${_floodRiskInfoList.length}');
+    
     if (_floodRiskInfoList.isEmpty) {
+      debugPrint('   ⚠️ No flood zones - showing all safe zones');
       return safeZones;
     }
     
@@ -1205,30 +1350,34 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
     
     for (var safeZone in safeZones) {
       final isInsideFloodZone = _isSafeZoneInFloodZone(safeZone);
+      debugPrint('   🏥 ${safeZone.name} (${safeZone.type}) - Inside flood zone: $isInsideFloodZone');
       
       if (isInsideFloodZone) {
         // Inside flood zone - only show hospitals
         if (safeZone.type.toLowerCase() == 'hospital' || 
             safeZone.type.toLowerCase() == 'medical_centre' ||
             safeZone.type.toLowerCase() == 'clinic') {
+          debugPrint('     ✅ Adding hospital inside flood zone');
           filteredZones.add(safeZone);
+        } else {
+          debugPrint('     ❌ Skipping non-hospital inside flood zone');
         }
       } else {
         // Outside flood zone - show all types
+        debugPrint('     ✅ Adding safe zone outside flood zone');
         filteredZones.add(safeZone);
       }
     }
     
+    debugPrint('   🎯 Filtered result: ${filteredZones.length} zones');
     return filteredZones;
   }
 
   /// Check if a safe zone is inside any flood zone
   bool _isSafeZoneInFloodZone(SafeZone safeZone) {
     for (var floodZone in _floodRiskInfoList) {
-      for (var polygon in floodZone.polygons) {
-        if (polygon.isNotEmpty && _isPointInPolygon(safeZone.location, polygon)) {
-          return true;
-        }
+      if (GeometryService.isPointInAnyPolygon(safeZone.location, floodZone.polygons)) {
+        return true;
       }
     }
     return false;
@@ -1628,42 +1777,16 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
     return LatLng(position.latitude, position.longitude);
   }
 
-  // --- 9. POINT-IN-POLYGON LOGIC ---
-
-  /// Check if a point is inside a polygon using ray casting algorithm
-  bool _isPointInPolygon(LatLng point, List<LatLng> polygon) {
-    if (polygon.length < 3) return false;
-    
-    bool inside = false;
-    int j = polygon.length - 1;
-    
-    for (int i = 0; i < polygon.length; i++) {
-      final double xi = polygon[i].longitude;
-      final double yi = polygon[i].latitude;
-      final double xj = polygon[j].longitude;
-      final double yj = polygon[j].latitude;
-      
-      if (((yi > point.latitude) != (yj > point.latitude)) &&
-          (point.longitude < (xj - xi) * (point.latitude - yi) / (yj - yi) + xi)) {
-        inside = !inside;
-      }
-      j = i;
-    }
-    
-    return inside;
-  }
+  // --- 9. GEOMETRY LOGIC (Now using GeometryService) ---
 
   /// Find flood zones that contain the user's location
   List<FloodRiskInfo> _getUserFloodZones(LatLng userLocation, List<FloodRiskInfo> friData) {
     final userZones = <FloodRiskInfo>[];
     
     for (var zone in friData) {
-      // Check each polygon in the zone
-      for (var polygon in zone.polygons) {
-        if (polygon.isNotEmpty && _isPointInPolygon(userLocation, polygon)) {
-          userZones.add(zone);
-          break; // Found in this zone, no need to check other polygons
-        }
+      // Check if user is in any polygon of this zone
+      if (GeometryService.isPointInAnyPolygon(userLocation, zone.polygons)) {
+        userZones.add(zone);
       }
     }
     
@@ -2095,19 +2218,22 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
               ),
               const SizedBox(height: 32.0),
 
-              // 4. Emergency Escape Button (Placeholder logic)
+              // 4. Emergency Escape Button
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: ElevatedButton(
                   onPressed: () {
-                    /* Handle emergency action */
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const ReportScreen()),
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFC62828),
                     minimumSize: const Size(double.infinity, 50),
                   ),
                   child: const Text(
-                    'Emergency Escape',
+                    'Incident Report',
                     style: TextStyle(color: Colors.white, fontSize: 20),
                   ),
                 ),

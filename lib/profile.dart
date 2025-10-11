@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'firebase_service.dart';
@@ -325,6 +326,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _signInWithCognito() async {
+    try {
+      const url = 'https://cognitoedu.org/login';
+      final Uri cognitoUri = Uri.parse(url);
+      
+      if (await canLaunchUrl(cognitoUri)) {
+        await launchUrl(cognitoUri, mode: LaunchMode.externalApplication);
+      } else {
+        _showErrorSnackBar('Could not open Cognito login page');
+      }
+    } catch (error) {
+      print('Error opening Cognito login: $error');
+      _showErrorSnackBar('Failed to open Cognito login page');
+    }
+  }
+
   Future<void> _signOut() async {
     setState(() => _isLoading = true);
 
@@ -406,34 +423,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.green),
     );
-  }
-
-  // Debug method to test SharedPreferences persistence
-  Future<void> _testPersistence() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userData = prefs.getString('userProfile');
-
-      print('=== PERSISTENCE TEST ===');
-      print('Raw SharedPreferences data: $userData');
-
-      if (userData != null) {
-        final userMap = jsonDecode(userData);
-        final testProfile = UserProfile.fromJson(userMap);
-        print('Parsed profile data:');
-        print('- ID: ${testProfile.id}');
-        print('- Name: ${testProfile.displayName}');
-        print('- Email: ${testProfile.email}');
-        print('- Phone: ${testProfile.phoneNumber}');
-        print('- Address: ${testProfile.address}');
-        print('- Regions: ${testProfile.floodRegions}');
-      } else {
-        print('No data found in SharedPreferences');
-      }
-      print('========================');
-    } catch (e) {
-      print('Error testing persistence: $e');
-    }
   }
 
   void _editPhoneNumber() {
@@ -751,7 +740,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16, color: Colors.grey),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
+          
+          // Firebase Status Indicator
+          Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.cloud_done,
+                    color: Colors.green,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Firebase Connected',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.green,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             height: 50,
@@ -784,6 +802,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
             width: double.infinity,
             height: 50,
             child: OutlinedButton.icon(
+              onPressed: _signInWithCognito,
+              icon: const Icon(Icons.cloud, color: Color(0xFF2254C5)),
+              label: const Text(
+                'Sign in with AWS Cognito',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF2254C5),
+                side: const BorderSide(color: Color(0xFF2254C5)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton.icon(
               onPressed: _signInDemo,
               icon: const Icon(Icons.person_add, color: Color(0xFF2254C5)),
               label: const Text(
@@ -801,7 +839,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Sign in with your Google account or use Demo Mode for testing.',
+            'Sign in with Google, AWS Cognito, or use Demo Mode for testing.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,
@@ -820,77 +858,89 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Profile Header
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundImage:
-                        _userProfile!.photoUrl != null
-                            ? NetworkImage(_userProfile!.photoUrl!)
-                            : null,
-                    child:
-                        _userProfile!.photoUrl == null
-                            ? const Icon(Icons.person, size: 50)
-                            : null,
+          // Profile Header - Made Smaller and Centered
+          Center( // <--- 1. Center the entire square horizontally in the main column
+            child: FractionallySizedBox( // <--- 2. Constrain the size (e.g., 70% of screen width)
+              widthFactor: 0.6, // 70% of the parent's width
+              child: AspectRatio(
+                aspectRatio: 1.0, // Ensures it remains a square
+                child: Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _userProfile!.displayName,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0), // Reduced padding for a smaller square
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center, // <--- 3. Center contents vertically
+                      crossAxisAlignment: CrossAxisAlignment.center, // Already centered horizontally
+                      children: [
+                        CircleAvatar(
+                          radius: 40, // Reduced radius to fit a smaller square
+                          backgroundImage:
+                              _userProfile!.photoUrl != null
+                                  ? NetworkImage(_userProfile!.photoUrl!)
+                                  : null,
+                          child:
+                              _userProfile!.photoUrl == null
+                                  ? const Icon(Icons.person, size: 40) // Reduced icon size
+                                  : null,
+                        ),
+                        const SizedBox(height: 8), // Reduced spacing
+                        Text(
+                          _userProfile!.displayName,
+                          style: const TextStyle(
+                            fontSize: 20, // Reduced font size
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          _userProfile!.email,
+                          style: const TextStyle(fontSize: 14, color: Colors.grey), // Reduced font size
+                        ),
+                        const SizedBox(height: 1),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _userProfile!.hasPhoneNumber
+                                  ? _userProfile!.phoneNumber
+                                  : 'No phone number',
+                              style: TextStyle(
+                                fontSize: 14, // Reduced font size
+                                color:
+                                    _userProfile!.hasPhoneNumber
+                                        ? Colors.grey
+                                        : Colors.grey.shade400,
+                                fontStyle:
+                                    _userProfile!.hasPhoneNumber
+                                        ? FontStyle.normal
+                                        : FontStyle.italic,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            GestureDetector(
+                              onTap: _editPhoneNumber,
+                              child: Icon(
+                                Icons.edit,
+                                size: 12, // Reduced icon size
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _userProfile!.email,
-                    style: const TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _userProfile!.hasPhoneNumber
-                            ? _userProfile!.phoneNumber
-                            : 'No phone number',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color:
-                              _userProfile!.hasPhoneNumber
-                                  ? Colors.grey
-                                  : Colors.grey.shade400,
-                          fontStyle:
-                              _userProfile!.hasPhoneNumber
-                                  ? FontStyle.normal
-                                  : FontStyle.italic,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: _editPhoneNumber,
-                        child: Icon(
-                          Icons.edit,
-                          size: 16,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 24),
+
+          
+          const SizedBox(height: 20),
 
           // Address Section
           _buildInfoSection(
@@ -900,35 +950,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Phone Number Section
-          _buildPhoneNumberSection(),
-          const SizedBox(height: 12),
-
           // Flood Warning Regions
           _buildFloodRegionsSection(),
           const SizedBox(height: 24),
-
-          // Debug Test Button (temporary)
-          SizedBox(
-            width: double.infinity,
-            height: 36,
-            child: OutlinedButton.icon(
-              onPressed: _testPersistence,
-              icon: const Icon(Icons.bug_report, size: 16),
-              label: const Text(
-                'Test Persistence (Debug)',
-                style: TextStyle(fontSize: 12),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.orange,
-                side: const BorderSide(color: Colors.orange),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
 
           // Sign Out Button
           SizedBox(
@@ -991,60 +1015,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               value,
               textAlign: TextAlign.left,
               style: const TextStyle(fontSize: 16, color: Colors.black),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPhoneNumberSection() {
-    return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.phone, color: Color(0xFF2254C5)),
-                const SizedBox(width: 12),
-                const Text(
-                  'Phone Number',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => _editPhoneNumber(),
-                  icon: const Icon(
-                    Icons.edit,
-                    size: 20,
-                    color: Color(0xFF2254C5),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _userProfile!.phoneNumber.isNotEmpty
-                  ? _userProfile!.phoneNumber
-                  : 'No phone number provided',
-              textAlign: TextAlign.left,
-              style: TextStyle(
-                fontSize: 16,
-                color:
-                    _userProfile!.phoneNumber.isNotEmpty
-                        ? Colors.black
-                        : Colors.grey,
-              ),
             ),
           ],
         ),

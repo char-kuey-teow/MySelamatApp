@@ -48,6 +48,7 @@ app.*.map.json
 config.dart
 .env
 *.env
+app/google-services.json
 
 # Firebase Service Account JSON files (SECURITY: Contains private keys)
 assets/config/*.json
