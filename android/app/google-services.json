@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "614685176063-bhlpp7lsajit07mheasmqduc4om36sqt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.my_selamat_app",
+            "certificate_hash": "b56f961723f53f13d7307f101517c9fd86d7aae8"
+          }
+        },
+        {
           "client_id": "614685176063-umg4i59revg2lauipb2eoq5v7a34n4rr.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
