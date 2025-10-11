@@ -65,11 +65,18 @@ android {
 
         // Release uses your custom key.properties (if provided)
         if (keystorePropertiesFile.exists()) {
-            create("release") {
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-                storeFile = file("${keystoreProperties["storeFile"]}")
-                storePassword = keystoreProperties["storePassword"] as String
+            val keyAlias = keystoreProperties["keyAlias"] as String?
+            val keyPassword = keystoreProperties["keyPassword"] as String?
+            val storeFile = keystoreProperties["storeFile"] as String?
+            val storePassword = keystoreProperties["storePassword"] as String?
+            
+            if (keyAlias != null && keyPassword != null && storeFile != null && storePassword != null) {
+                create("release") {
+                    this.keyAlias = keyAlias
+                    this.keyPassword = keyPassword
+                    this.storeFile = file(storeFile)
+                    this.storePassword = storePassword
+                }
             }
         }
     }
@@ -99,6 +106,7 @@ flutter {
 }
 
 dependencies {
-    implementation(platform("com.google.firebase:firebase-bom:34.3.0"))
+    implementation(platform("com.google.firebase:firebase-bom:33.6.0"))
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-messaging")
 }

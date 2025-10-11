@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'firebase_options.dart';
 import 'sos-button.dart';
 import 'text_chatbot.dart';
 import 'profile.dart';
 import 'flood-map.dart';
+import 'services/notification_service.dart';
 import 'services/sos_state_service.dart';
 
 // -------------------------------------------------------------
@@ -260,7 +263,17 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    await Firebase.initializeApp();
+    // Initialize Firebase
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    
+    // Set up background message handler
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    
+    // Initialize notification service
+    final notificationService = NotificationService();
+    await notificationService.initialize();
   } catch (e) {
     print('Firebase initialization error: $e');
     // Continue without Firebase for now
