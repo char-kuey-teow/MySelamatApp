@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:io';
 import 'package:aws_s3_api/s3-2006-03-01.dart';
 import '../config.dart';
 
@@ -602,6 +603,58 @@ class S3Service {
       print('❌ Error getting all data from S3: $e');
       print('Stack Trace: $stackTrace');
       return {'reports': [], 'sos': []};
+    }
+  }
+
+  /// Upload photo to S3
+  static Future<String?> uploadPhoto(File imageFile, String userId) async {
+    try {
+      print('=== Uploading photo to S3 ===');
+      
+      // Validate configuration
+      if (!_validateConfig()) {
+        print('❌ Invalid S3 configuration');
+        return null;
+      }
+
+      // Generate unique filename for photo
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final filename = 'photos/photo_${userId}_$timestamp.jpg';
+      print('Photo filename: $filename');
+
+      // Read image file
+      final bytes = await imageFile.readAsBytes();
+      print('Photo size: ${bytes.length} bytes');
+
+      // Create AWS credentials
+      final credentials = AwsClientCredentials(
+        accessKey: _accessKey,
+        secretKey: _secretKey,
+      );
+
+      // Create S3 client
+      final s3Client = S3(
+        region: _region,
+        credentials: credentials,
+      );
+
+      // Upload photo to S3
+      final response = await s3Client.putObject(
+        bucket: _bucketName,
+        key: filename,
+        body: bytes,
+        contentType: 'image/jpeg',
+      );
+
+      print('✅ Successfully uploaded photo to S3: $filename');
+      print('ETag: ${response.eTag}');
+      
+      // Return the S3 URL for the uploaded photo
+      return 'https://$_bucketName.s3.$_region.amazonaws.com/$filename';
+    } catch (e, stackTrace) {
+      print('❌ Error uploading photo to S3: $e');
+      print('Stack Trace: $stackTrace');
+      return null;
     }
   }
 

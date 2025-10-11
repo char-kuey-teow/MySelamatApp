@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/services.dart';
@@ -2434,6 +2433,31 @@ class MyApp extends StatelessWidget {
             style: TextStyle(color: Colors.white),
           ),
           backgroundColor: const Color(0xFF2254C5),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.camera_alt, color: Colors.white),
+              tooltip: 'Screenshot Flood Map',
+              onPressed: () {
+                // This will be handled by the FloodMapWidget
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Tap the camera button on the map to take a screenshot'),
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.photo_library, color: Colors.white),
+              tooltip: 'Go to Report',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ReportScreen()),
+                );
+              },
+            ),
+          ],
         ),
         body: const FloodMapWidget(),
       ),
