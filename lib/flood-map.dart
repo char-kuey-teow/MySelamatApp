@@ -1954,12 +1954,12 @@ class _FloodMapWidgetState extends State<FloodMapWidget> {
                 ),
                 child: Builder(
                   builder: (context) {
-                    if (!_riskPanelScrollController.hasClients) {
+                    if (!_riskPanelScrollController.hasClients || _riskPanelScrollController.position == null) {
                       return Container();
                     }
                     
-                    final maxScrollExtent = _riskPanelScrollController.position.maxScrollExtent;
-                    final viewportHeight = _riskPanelScrollController.position.viewportDimension;
+                    final maxScrollExtent = _riskPanelScrollController.position!.maxScrollExtent;
+                    final viewportHeight = _riskPanelScrollController.position!.viewportDimension;
                     final contentHeight = maxScrollExtent + viewportHeight;
                     
                     if (maxScrollExtent <= 0) {

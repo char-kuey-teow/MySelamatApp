@@ -1,0 +1,21 @@
+{
+    "appName": "myselamatapp",
+    "roleName": "pinpointLambdaRolea43e4915",
+    "cloudformationPolicyName": "cloudformationPolicya43e4915",
+    "cloudWatchPolicyName": "cloudWatchPolicya43e4915",
+    "pinpointPolicyName": "pinpointPolicya43e4915",
+    "authPolicyName": "pinpoint_amplify_a43e4915",
+    "unauthPolicyName": "pinpoint_amplify_a43e4915",
+    "authRoleName": {
+        "Ref": "AuthRoleName"
+    },
+    "unauthRoleName": {
+        "Ref": "UnauthRoleName"
+    },
+    "authRoleArn": {
+        "Fn::GetAtt": [
+            "AuthRole",
+            "Arn"
+        ]
+    }
+}

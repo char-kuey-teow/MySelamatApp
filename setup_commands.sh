@@ -220,3 +220,6 @@ echo "     aws lambda invoke --function-name S3ToDynamoDBBatchImporter --payload
 echo "     aws lambda invoke --function-name S3ToDynamoDBBatchImporter --payload '{\"bucket\":\"selamat-app-reports\",\"prefix\":\"reports/\"}' response.json"
 
 
+
+
+

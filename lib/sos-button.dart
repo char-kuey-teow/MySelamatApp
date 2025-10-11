@@ -908,7 +908,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
 
       // Add phone number only if it exists and is not empty
       if (_currentUserProfile?.hasPhoneNumber == true) {
-        sosData['userPhone'] = _currentUserProfile!.phoneNumber!;
+        sosData['userPhone'] = _currentUserProfile!.phoneNumber;
       }
 
       // Upload SOS data to S3 first
@@ -1428,7 +1428,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                 _buildDetailRow(
                   icon: Icons.phone_outlined,
                   label: 'Phone',
-                  value: _currentUserProfile!.phoneNumber!,
+                  value: _currentUserProfile!.phoneNumber,
                   color: Colors.white70,
                 ),
               _buildDetailRow(
