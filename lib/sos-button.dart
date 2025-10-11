@@ -154,8 +154,11 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
       return;
     }
 
-    // Check if user is in flood zone before allowing SOS
-    _checkFloodZoneAndProceed(context);
+    // Start SOS sequence immediately - no delays!
+    _startSOSHoldSequence(context);
+    
+    // Validate flood zone in background (non-blocking)
+    _validateFloodZoneInBackground(context);
   }
 
   void _onSosUp(BuildContext context, TapUpDetails details) => _resetSosState();
@@ -226,6 +229,49 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
     }
   }
 
+  /// Validate flood zone in background without blocking the SOS timer
+  Future<void> _validateFloodZoneInBackground(BuildContext context) async {
+    try {
+      debugPrint('🔍 Starting background flood zone validation...');
+      
+      // Get current user location (with shorter timeout for background check)
+      final position = await _getCurrentLocationForFloodCheck();
+      if (position == null) {
+        debugPrint('❌ Background validation failed: No location available');
+        // Don't interrupt SOS for location issues in background
+        return;
+      }
+
+      // Check if user is in flood zone
+      final isInFloodZone = await FloodZoneService.isUserInFloodZone(position);
+      
+      if (!isInFloodZone) {
+        debugPrint('❌ Background validation failed: Not in flood zone');
+        
+        // Log the attempt for analytics
+        await FloodZoneService.logSOSAttemptOutsideFloodZone(position);
+        
+        // Only cancel if SOS is still in progress (user hasn't completed the hold)
+        if (_isSosPressed && _isHolding && !_isSosActive) {
+          _resetSosState();
+          _showStatusMessage(
+            context,
+            'SOS cancelled: For your safety, SOS is only available in active flood zones.',
+            isError: true,
+          );
+        }
+        return;
+      }
+
+      debugPrint('✅ Background validation passed: User is in flood zone');
+      // User is in flood zone - SOS can proceed normally
+      
+    } catch (e) {
+      debugPrint('❌ Error in background flood zone validation: $e');
+      // Don't interrupt SOS for validation errors in background
+    }
+  }
+
   /// Start the SOS hold sequence (moved from _onSosDown)
   void _startSOSHoldSequence(BuildContext context) {
     HapticFeedback.lightImpact();
@@ -283,10 +329,10 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
         return null;
       }
 
-      // Get current position
+      // Get current position with optimized settings for background validation
       final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
+        desiredAccuracy: LocationAccuracy.medium, // Reduced accuracy for faster response
+        timeLimit: const Duration(seconds: 5), // Reduced timeout for background check
       );
 
       return position;
