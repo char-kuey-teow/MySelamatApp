@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:image_picker/image_picker.dart';
 import 'dart:async';
+import 'dart:io';
 import 'services/s3_service.dart';
 
 class ReportScreen extends StatefulWidget {
@@ -17,6 +20,14 @@ class _ReportScreenState extends State<ReportScreen> {
   String? _selectedWaterLevel;
   final TextEditingController _locationController = TextEditingController();
 
+  // Photo state
+  File? _selectedImage;
+  final ImagePicker _imagePicker = ImagePicker();
+
+  // Location state
+  bool _isGettingLocation = false;
+  String _locationStatus = '';
+
   // UI state
   bool _isSubmitting = false;
   String _submitStatus = '';
@@ -27,6 +38,12 @@ class _ReportScreenState extends State<ReportScreen> {
   static const Color successGreen = Color(0xFF4CAF50);
   static const Color warningOrange = Color(0xFFFF9800);
   static const Color dangerRed = Color(0xFFF44336);
+
+  @override
+  void initState() {
+    super.initState();
+    _getCurrentLocationAndAddress();
+  }
 
   @override
   void dispose() {
@@ -47,6 +64,68 @@ class _ReportScreenState extends State<ReportScreen> {
   void _selectWaterLevel(String level) {
     setState(() {
       _selectedWaterLevel = level;
+    });
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      // Check storage permission first
+      final permission = await Permission.photos.request();
+      if (!permission.isGranted) {
+        _showStatusMessage('Storage permission is required to select photos.', isError: true);
+        return;
+      }
+
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+      
+      if (image != null) {
+        setState(() {
+          _selectedImage = File(image.path);
+        });
+        _showStatusMessage('Photo selected successfully', isError: false);
+      }
+    } catch (e) {
+      print('Error picking image: $e');
+      _showStatusMessage('Error selecting image. Please check permissions and try again.', isError: true);
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    try {
+      // Check camera permission first
+      final permission = await Permission.camera.request();
+      if (!permission.isGranted) {
+        _showStatusMessage('Camera permission is required to take photos.', isError: true);
+        return;
+      }
+
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+      
+      if (image != null) {
+        setState(() {
+          _selectedImage = File(image.path);
+        });
+        _showStatusMessage('Photo taken successfully', isError: false);
+      }
+    } catch (e) {
+      print('Error taking photo: $e');
+      _showStatusMessage('Error taking photo. Please check camera permissions and try again.', isError: true);
+    }
+  }
+
+  void _removeImage() {
+    setState(() {
+      _selectedImage = null;
     });
   }
 
@@ -71,6 +150,18 @@ class _ReportScreenState extends State<ReportScreen> {
       // Get current location
       final position = await _getCurrentLocation();
 
+      // Upload photo first if selected
+      String? photoUrl;
+      if (_selectedImage != null) {
+        _showStatusMessage('Uploading photo...', isError: false);
+        photoUrl = await S3Service.uploadPhoto(_selectedImage!, 'user_123');
+        if (photoUrl == null) {
+          _showStatusMessage('Photo upload failed, but continuing with report...', isError: true);
+        } else {
+          _showStatusMessage('Photo uploaded successfully', isError: false);
+        }
+      }
+
       // Prepare report data
       final reportData = {
         'disasterType': _selectedDisasterType,
@@ -81,6 +172,8 @@ class _ReportScreenState extends State<ReportScreen> {
         'timestamp': DateTime.now().toIso8601String(),
         'userId': 'user_123', // In real app, get from authentication
         'userName': 'John Doe', // In real app, get from user profile
+        'photoUrl': photoUrl, // Include photo URL if uploaded
+        'hasPhoto': _selectedImage != null,
       };
 
       // Test AWS credentials first
@@ -125,6 +218,67 @@ class _ReportScreenState extends State<ReportScreen> {
     }
   }
 
+  Future<void> _getCurrentLocationAndAddress() async {
+    setState(() {
+      _isGettingLocation = true;
+      _locationStatus = 'Getting your location...';
+    });
+
+    try {
+      final permission = await Permission.location.request();
+      if (permission.isGranted) {
+        final position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        );
+        
+        // Get address from coordinates
+        final placemarks = await placemarkFromCoordinates(
+          position.latitude,
+          position.longitude,
+        );
+        
+        if (placemarks.isNotEmpty) {
+          final place = placemarks[0];
+          String address = '';
+          
+          // Build address from placemark components
+          if (place.locality?.isNotEmpty == true) {
+            address += place.locality!;
+          }
+          if (place.administrativeArea?.isNotEmpty == true) {
+            if (address.isNotEmpty) address += ', ';
+            address += place.administrativeArea!;
+          }
+          
+          setState(() {
+            _locationController.text = address.isNotEmpty ? address : 'Location detected';
+            _locationStatus = 'Location detected successfully';
+          });
+        } else {
+          setState(() {
+            _locationController.text = 'Location detected';
+            _locationStatus = 'Location detected (address unavailable)';
+          });
+        }
+      } else {
+        setState(() {
+          _locationController.text = 'Location permission denied';
+          _locationStatus = 'Please enable location permissions';
+        });
+      }
+    } catch (e) {
+      print('Error getting location and address: $e');
+      setState(() {
+        _locationController.text = 'Unable to get location';
+        _locationStatus = 'Location service unavailable';
+      });
+    } finally {
+      setState(() {
+        _isGettingLocation = false;
+      });
+    }
+  }
+
   Future<Position?> _getCurrentLocation() async {
     try {
       final permission = await Permission.location.request();
@@ -159,8 +313,11 @@ class _ReportScreenState extends State<ReportScreen> {
     setState(() {
       _selectedDisasterType = 'Flood';
       _selectedWaterLevel = null;
+      _selectedImage = null;
       _locationController.clear();
     });
+    // Re-get location after form reset
+    _getCurrentLocationAndAddress();
   }
 
   @override
@@ -183,8 +340,8 @@ class _ReportScreenState extends State<ReportScreen> {
         centerTitle: true,
         elevation: 0,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 32.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -250,7 +407,7 @@ class _ReportScreenState extends State<ReportScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 24.0),
+            const SizedBox(height: 20.0),
 
             // Water Level Section (only show for Flood)
             if (_selectedDisasterType == 'Flood') ...[
@@ -274,12 +431,12 @@ class _ReportScreenState extends State<ReportScreen> {
                   Expanded(child: _buildWaterLevelButton('High', dangerRed)),
                 ],
               ),
-              const SizedBox(height: 24.0),
+              const SizedBox(height: 20.0),
             ],
 
-            // Location Section
+            // Photo Upload Section
             const Text(
-              'Flood location',
+              'Photo Evidence',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -287,11 +444,55 @@ class _ReportScreenState extends State<ReportScreen> {
               ),
             ),
             const SizedBox(height: 12.0),
+            _buildPhotoSection(),
+            const SizedBox(height: 20.0),
+
+            // Location Section
+            Row(
+              children: [
+                const Text(
+                  'Location',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: _isGettingLocation ? null : _getCurrentLocationAndAddress,
+                  icon: _isGettingLocation 
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh, size: 16),
+                  label: Text(
+                    _isGettingLocation ? 'Getting...' : 'Refresh',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12.0),
             TextField(
               controller: _locationController,
+              readOnly: true,
               decoration: InputDecoration(
-                hintText: 'District, State (e.g., Shah Alam, Selangor)',
+                hintText: 'Getting your location...',
                 hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+                prefixIcon: const Icon(Icons.location_on, color: primaryBlue),
+                suffixIcon: _isGettingLocation 
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: Padding(
+                        padding: EdgeInsets.all(12),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: BorderSide(color: Colors.grey.shade300),
@@ -310,7 +511,17 @@ class _ReportScreenState extends State<ReportScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 32.0),
+            if (_locationStatus.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                _locationStatus,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+            const SizedBox(height: 24.0),
 
             // Submit Button
             SizedBox(
@@ -404,6 +615,165 @@ class _ReportScreenState extends State<ReportScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPhotoSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_selectedImage == null) ...[
+          // Photo selection buttons
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _takePhoto,
+                  icon: const Icon(Icons.camera_alt, size: 18),
+                  label: const Text('Take Photo'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryBlue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _pickImage,
+                  icon: const Icon(Icons.photo_library, size: 18),
+                  label: const Text('Choose Photo'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey.shade600,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            height: 120,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
+              borderRadius: BorderRadius.circular(8),
+              color: Colors.grey.shade50,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.add_a_photo,
+                  size: 40,
+                  color: Colors.grey.shade400,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'No photo selected',
+                  style: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Photo evidence is recommended',
+                  style: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else ...[
+          // Selected image preview
+          Container(
+            width: double.infinity,
+            height: 200,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.file(
+                    _selectedImage!,
+                    fit: BoxFit.cover,
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: _removeImage,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _takePhoto,
+                  icon: const Icon(Icons.camera_alt, size: 18),
+                  label: const Text('Retake'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryBlue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _pickImage,
+                  icon: const Icon(Icons.photo_library, size: 18),
+                  label: const Text('Change'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey.shade600,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }
